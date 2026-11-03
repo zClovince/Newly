@@ -1,12 +1,9 @@
 # Newly
+<img width="950" height="430" alt="image" src="https://github.com/user-attachments/assets/f815ebc2-188f-4f69-9a48-ecc2320c9738" />
 
 A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you choose, weather, clock, calendar, quotes, shortcuts and prayer times. Chrome / Brave / Edge and Firefox 128 ESR+ (Manifest V3), from one shared folder.
 
 **Repository:** [github.com/zClovince/Newly](https://github.com/zClovince/Newly) — free, source included, fork it and make it yours.
-
-## Newly 2.0.0
-
-Newly is the new name for this project (it began as *Custom New Tab*). Everything sits on one screen, and you decide what shows, where it sits and how it looks.
 
 ### What's new in 2.0 — Liquid Glass
 

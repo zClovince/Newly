@@ -3,7 +3,7 @@
 
 A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you choose, weather, clock, calendar, quotes, shortcuts and prayer times. Chrome / Brave / Edge and Firefox 128 ESR+ (Manifest V3), from one shared folder.
 
-**Repository:** [github.com/zClovince/Newly](https://github.com/zClovince/Newly) — free, source included, fork it and make it yours.
+**Download:** [Releases](https://github.com/zClovince/Newly/releases/new) — free, source included, fork it and make it yours.
 
 ### About Newly :)
 

@@ -47,7 +47,8 @@ var K = {
   panelSize:'nt_panel_size', sizes:'nt_sizes',
   timeSource:'nt_time_source', calSize:'nt_cal_size',
   onboarded:'nt_onboarded',
-  motion:'nt_grad_motion', motionSpeed:'nt_grad_speed'
+  motion:'nt_grad_motion', motionSpeed:'nt_grad_speed',
+  glassStyle:'nt_glass_style', glassTintMode:'nt_glass_tint_mode'
 };
 
 /* in-memory mirror: the clock used to hit localStorage 4x per second */
@@ -153,6 +154,38 @@ var BROWSERS = [
     favicon:'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Firefox_logo%2C_2019.svg/500px-Firefox_logo%2C_2019.svg.png' }
 ];
 
+/* ── a fresh profile starts on the browser it was opened in ──
+   The tab icon matches instead of waiting for a manual pick. Only a profile
+   with no settings at all is touched, so an upgrade never changes anyone's
+   chosen icon; the Browser pane still overrides this at any time. */
+function detectBrowserDefault(){
+  try{
+    if(gs(K.browser) || gs(K.fav)) return;
+    var established = ['name','weatherCity','gradient','quoteCat','searchEngine','tabNameStyle','statusLabel','sc'].some(function(k){
+      var v = gs(K[k]);
+      return v != null && v !== '' && v !== '[]' && v !== '{}';
+    });
+    if(established) return;
+    var apply = function(name){
+      if(!name || gs(K.browser) || gs(K.fav)) return;
+      var b = null;
+      BROWSERS.forEach(function(x){ if(x.name === name) b = x; });
+      if(!b) return;
+      ss(K.browser, b.name);
+      ss(K.fav, b.favicon);
+      applyBrowserFav(b.favicon);
+    };
+    var ua = navigator.userAgent || '';
+    if(/Firefox\//.test(ua) || /FxiOS\//.test(ua)){ apply('Firefox'); return; }
+    if(/Edg\//.test(ua) || /EdgiOS\//.test(ua) || /EdgA\//.test(ua)){ apply('Edge'); return; }
+    if(navigator.brave && typeof navigator.brave.isBrave === 'function'){
+      navigator.brave.isBrave().then(function(ok){ apply(ok ? 'Brave' : 'Chrome'); }, function(){ apply('Chrome'); });
+      return;
+    }
+    apply('Chrome');
+  }catch(e){}
+}
+
 /* Apple-ish static gradients used whenever the video is off. All are dark and
    desaturated on purpose, so white glass cards and text stay readable. */
 var GRADIENTS = [
@@ -181,6 +214,9 @@ function applyGradient(i){
   var root = document.documentElement.style;
   root.setProperty('--grad-bg', g.css);
   root.setProperty('--grad-blob', g.blob || 'none');
+  /* adaptive glass reads its tint from the scene, so a palette change is a
+     tint change — re-derive it quietly on the next frame */
+  if(glassTintMode() === 'adaptive') queueGlass();
 }
 /* how much the gradient drifts: 'still', 'slow' or 'flow'. Slow is the
    default — a barely-there life in the colours that costs almost nothing. */
@@ -294,7 +330,7 @@ var GLASS_PRESETS = {
   clear:   {blur:16, alpha:6,  tint:'rgba(255,255,255,1)'},
   frosted: {blur:44, alpha:16, tint:'rgba(255,255,255,1)'},
   tinted:  {blur:28, alpha:14, tint:'rgba(30,30,60,1)'},
-  liquid:  {blur:8,  alpha:40, tint:'rgba(15,15,30,1)'}
+  liquid:  {blur:2,  alpha:21, tint:'rgba(15,15,30,1)'}
 };
 
 var ENGINES = {
@@ -609,11 +645,115 @@ function applyFontColor(){
 /* ══════════════════════════════════════════
    GLASS  (CSS variables instead of rewriting a stylesheet)
 ══════════════════════════════════════════ */
+/* classic = the 1.0 frosted look; liquid = real refraction at the rim.
+   Liquid is the default now; Classic stays one click away. */
+function glassStyle(){
+  var s = gs(K.glassStyle);
+  return (s === 'classic') ? 'classic' : 'liquid';
+}
+function glassTintMode(){
+  var m = gs(K.glassTintMode);
+  return (m === 'adaptive') ? 'adaptive' : 'manual';
+}
+/* the active palette's leading blob colour, lifted toward white so the glass
+   stays bright and readable — used when tint is set to Adaptive */
+function paletteAccent(){
+  var g = GRADIENTS[gradientIndex()] || GRADIENTS[0];
+  var m = (g && g.blob) ? g.blob.match(/rgba?\(([^)]+)\)/) : null;
+  var p = (m ? m[1] : '255,255,255').split(',');
+  var r = parseInt(p[0],10), gg = parseInt(p[1],10), b = parseInt(p[2],10);
+  if(isNaN(r)) r = 255; if(isNaN(gg)) gg = 255; if(isNaN(b)) b = 255;
+  r  = Math.round(r  * 0.55 + 255 * 0.45);
+  gg = Math.round(gg * 0.55 + 255 * 0.45);
+  b  = Math.round(b  * 0.55 + 255 * 0.45);
+  return 'rgba(' + r + ',' + gg + ',' + b + ',1)';
+}
+function effectiveTint(){
+  if(glassTintMode() === 'adaptive') return paletteAccent();
+  return gs(K.glassTint) || GLASS_TINTS[GLASS_TINTS.length - 1];
+}
+/* One displacement map, generated once and reused by every surface. R and G
+   encode an INWARD push (toward the centre) that grows toward the edge — a
+   lens, not a wobble. 128 is "no shift", so the centre of every card stays
+   flat and crisp, and the bend only ever samples the element's own backdrop,
+   never the transparent void beyond it (which is what painted black rims). */
+var _lensMapURL = null;
+function lensMapURL(){
+  if(_lensMapURL) return _lensMapURL;
+  var size = 256;
+  var cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  var ctx = cv.getContext('2d');
+  if(!ctx) return null;
+  var img = ctx.createImageData(size, size);
+  var data = img.data;
+  var c = (size - 1) / 2, R = size / 2;
+  for(var y = 0; y < size; y++){
+    for(var x = 0; x < size; x++){
+      var dx = (x - c) / R, dy = (y - c) / R;
+      var dist = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+      var ux = dx / dist, uy = dy / dist;        /* outward direction */
+      /* flat until ~20% out, then a smooth ramp to full push at the rim */
+      var t = (Math.min(1, dist) - 0.2) / 0.75;
+      t = Math.max(0, Math.min(1, t));
+      var f = t * t * (3 - 2 * t);               /* smoothstep */
+      var i = (y * size + x) * 4;
+      data[i]   = 128 - ux * f * 127;            /* R → x shift, inward */
+      data[i+1] = 128 - uy * f * 127;            /* G → y shift, inward */
+      data[i+2] = 0;
+      data[i+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  _lensMapURL = cv.toDataURL('image/png');
+  return _lensMapURL;
+}
+function applyLensMap(){
+  var im = $('lg-map');
+  if(!im) return;
+  var url = lensMapURL();
+  if(!url) return;
+  /* xlink:href is the form every engine agrees on; href alone is newer. Set both. */
+  im.setAttributeNS('http://www.w3.org/1999/xlink', 'href', url);
+  im.setAttribute('href', url);
+}
+/* Liquid Glass is the one heavy thing here. After it is switched on, watch the
+   real frame rate for a moment; if the device cannot hold a calm pace, quietly
+   fall back to Classic instead of grinding. One probe at a time. */
+var _glassProbe = false;
+function glassPerfProbe(){
+  if(_glassProbe || document.hidden) return;
+  _glassProbe = true;
+  /* Let the new-tab page finish its own startup work first: measuring during
+     load would blame Liquid Glass for someone else's frames. */
+  setTimeout(function(){
+    if(glassStyle() !== 'liquid' || document.hidden){ _glassProbe = false; return; }
+    var warmup = 10, frames = 0, start = 0;
+    function tick(now){
+      if(document.hidden || glassStyle() !== 'liquid'){ _glassProbe = false; return; }
+      frames++;
+      if(frames <= warmup){ requestAnimationFrame(tick); return; }
+      if(!start){ start = now; requestAnimationFrame(tick); return; }
+      if(now - start < 2000){ requestAnimationFrame(tick); return; }
+      var fps = (frames - warmup) / ((now - start) / 1000);
+      _glassProbe = false;
+      if(fps < 32 && glassStyle() === 'liquid'){
+        ss(K.glassStyle, 'classic');
+        applyGlassSettings();
+        if(typeof noteToast === 'function'){
+          noteToast('Liquid Glass paused \u2014 it was asking a lot of this device.', true, true);
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }, 1200);
+}
+
 var _glassQueued = false;
 function applyGlassSettings(){
-  var blur  = parseInt(gs(K.glassBlur)  || '30',10);
-  var alpha = parseInt(gs(K.glassAlpha) || '10',10);
-  var tint  = gs(K.glassTint) || 'rgba(255,255,255,1)';
+  var blur  = parseInt(gs(K.glassBlur)  || '2',10);
+  var alpha = parseInt(gs(K.glassAlpha) || '21',10);
+  var tint  = effectiveTint();
   var m = tint.match(/rgba?\(([^)]+)\)/);
   var p = (m ? m[1] : '255,255,255').split(',');
   var r = parseInt(p[0],10) || 0;
@@ -622,6 +762,29 @@ function applyGlassSettings(){
   var root = document.documentElement.style;
   root.setProperty('--glass-blur', blur + 'px');
   root.setProperty('--glass-bg', 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha/100) + ')');
+  root.setProperty('--glass-tint-rgb', r + ',' + g + ',' + b);
+  /* A sheet is a denser material than a card, and the scene behind it gets a
+     soft blur of its own, so text always has something calm to sit on. */
+  root.setProperty('--glass-sheet-blur', Math.min(44, Math.max(18, blur)) + 'px');
+  root.setProperty('--glass-scrim-blur', Math.min(16, Math.max(8, blur)) + 'px');
+  var liquid = glassStyle() === 'liquid';
+  document.body.classList.toggle('glass-liquid', liquid);
+  document.body.classList.toggle('glass-classic', !liquid);
+  document.body.classList.toggle('glass-tint-adaptive', glassTintMode() === 'adaptive');
+  var seg = $('glass-style-seg');
+  if(seg){
+    Array.prototype.forEach.call(seg.querySelectorAll('.seg-btn'), function(btn){
+      btn.classList.toggle('on', btn.getAttribute('data-glass') === glassStyle());
+    });
+  }
+  var tseg = $('glass-tint-seg');
+  if(tseg){
+    Array.prototype.forEach.call(tseg.querySelectorAll('.seg-btn'), function(btn){
+      btn.classList.toggle('on', btn.getAttribute('data-tintmode') === glassTintMode());
+    });
+  }
+  if(liquid){ applyLensMap(); glassPerfProbe(); }
+  syncAllRangeFills();
 }
 function queueGlass(){
   if(_glassQueued) return;
@@ -631,6 +794,25 @@ function queueGlass(){
     applyGlassSettings();
   });
 }
+
+/* ── sliders: keep the travelled part in the accent colour ──
+   The track is painted with a gradient that stops at --fill, so every range
+   input reports its own percentage here. */
+function syncRangeFill(el){
+  if(!el || el.type !== 'range') return;
+  var min = parseFloat(el.min), max = parseFloat(el.max), v = parseFloat(el.value);
+  if(!isFinite(min)) min = 0;
+  if(!isFinite(max)) max = min + 100;
+  if(!isFinite(v)) v = min;
+  var p = (max > min) ? ((v - min) / (max - min)) * 100 : 0;
+  el.style.setProperty('--fill', Math.max(0, Math.min(100, p)) + '%');
+}
+function syncAllRangeFills(){
+  Array.prototype.forEach.call(document.querySelectorAll('input[type=range]'), syncRangeFill);
+}
+document.addEventListener('input', function(e){
+  if(e.target && e.target.type === 'range') syncRangeFill(e.target);
+}, true);
 
 /* ══════════════════════════════════════════
    SETTINGS PANEL SIZE  (3 steps, not freeform)
@@ -913,6 +1095,56 @@ var MONTHS = ['January','February','March','April','May','June','July','August',
 
 function pad2(n){ return n < 10 ? '0' + n : '' + n; }
 
+/* ── live previews for the clock & date controls ──
+   The option labels in Settings and in the Clock window used to show a
+   frozen sample ("09:35", "Fri, June 26"). They now read the same wall clock
+   the widget uses, so choosing a format never means imagining a different
+   time. */
+function clockPreviewText(styleId){
+  var now = wallNow();
+  var o = getClockOpts();
+  var hh = (o.hour === '12') ? (now.h % 12 || 12) : now.h;
+  var t = (styleId === 'minimal' ? '' + hh : pad2(hh)) + ':' + pad2(now.m);
+  if(o.secs === '1') t += ':' + pad2(now.s);
+  if(o.hour === '12') t += (now.h < 12 ? ' AM' : ' PM');
+  return t;
+}
+function datePreviewText(fmt){
+  var now = wallNow();
+  var dd = now.date, mo = now.mon, yr = now.year;
+  if(fmt === 'long')  return DAYS[now.dow] + ', ' + MONTHS[mo] + ' ' + dd;
+  if(fmt === 'short') return pad2(dd) + '/' + pad2(mo + 1) + '/' + yr;
+  if(fmt === 'us')    return pad2(mo + 1) + '/' + pad2(dd) + '/' + yr;
+  if(fmt === 'iso')   return yr + '-' + pad2(mo + 1) + '-' + pad2(dd);
+  return '';
+}
+function refreshClockLivePreviews(){
+  var now = wallNow();
+  var h12 = (now.h % 12 || 12);
+  var t12 = pad2(h12) + ':' + pad2(now.m) + (now.h < 12 ? ' AM' : ' PM');
+  var t24 = pad2(now.h) + ':' + pad2(now.m);
+  ['ihour','clockwin-hour'].forEach(function(id){
+    var s = $(id);
+    if(!s) return;
+    var a = s.querySelector('option[value="12"]');
+    var b = s.querySelector('option[value="24"]');
+    if(a) a.textContent = '12-hour (' + t12 + ')';
+    if(b) b.textContent = '24-hour (' + t24 + ')';
+  });
+  ['idatefmt','clockwin-datefmt'].forEach(function(id){
+    var s = $(id);
+    if(!s) return;
+    ['long','short','us','iso'].forEach(function(fmt){
+      var opt = s.querySelector('option[value="' + fmt + '"]');
+      if(opt) opt.textContent = datePreviewText(fmt);
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.clock-card'), function(card){
+    var p = card.querySelector('.cprev');
+    if(p) p.textContent = clockPreviewText(card.getAttribute('data-id'));
+  });
+}
+
 /* ── time source: this device, or the weather city's timezone ──
    Open-Meteo hands back a UTC offset for the city; we shift the clock by it
    and read the UTC fields, which gives that place's wall clock. */
@@ -935,11 +1167,21 @@ function refreshTimeSource(){
   applyClockStyle();
   renderClock();
   renderCalendar();
+  scheduleCalendar();   /* repaint on the city's midnight too, not just the device's */
   renderGreeting();
   updateTabName();
 }
+/* one place every "time source" control goes through, so the clock, the
+   calendar and the settings segments never fall out of step */
+function onTimeSourcePicked(){
+  refreshTimeSource();
+  extSyncTimeSource();
+  /* switching to the city before its offset is known: pull the forecast so
+     utc_offset_seconds arrives and the clock + calendar can follow it */
+  if((gs(K.timeSource) || 'device') === 'city' && _tzOffsetSec == null) loadWeather(false);
+}
 function applyCalSize(){
-  var px = parseInt(gs(K.calSize),10); if(!(px > 0)) px = 10;
+  var px = parseInt(gs(K.calSize),10); if(!(px > 0)) px = 9;
   var root = document.documentElement.style;
   root.setProperty('--cal-day-size', px + 'px');
   root.setProperty('--cal-dow-size', Math.max(7, Math.round(px * 0.8)) + 'px');
@@ -986,6 +1228,12 @@ function renderClock(){
     _lastHour = h;
     var gstyle = gs(K.style) || 'hi';
     if(gstyle === 'good' || gstyle === 'custom') renderGreeting();
+  }
+
+  /* keep the live option previews in step while Settings or the Clock window
+     is on screen; both are hidden the rest of the time, so skip the writes */
+  if((overlay && overlay.classList.contains('open')) || _openWin === 'clock-modal'){
+    refreshClockLivePreviews();
   }
 }
 
@@ -1369,7 +1617,7 @@ var MIN_H = {shortcuts:70,  datetime:70,  calendar:128, prayer:76,  'greeting-wr
 var DEFAULT_SIZE = {
   shortcuts:       { w:356, h:76 },
   datetime:        { w:175, h:78 },
-  calendar:        { w:222, h:186 },
+  calendar:        { w:200, h:168 },
   prayer:          { w:200, h:96 },
   'greeting-wrap': { w:300, h:50 },
   searchbar:       { w:500, h:42 },
@@ -1380,7 +1628,7 @@ var DEFAULT_SIZE = {
 var NATURAL_MIN = {
   shortcuts:       { w:300, h:76  },
   datetime:        { w:175, h:84  },
-  calendar:        { w:210, h:178 },
+  calendar:        { w:192, h:160 },
   prayer:          { w:180, h:92  },
   'greeting-wrap': { w:240, h:50  },
   searchbar:       { w:420, h:42  },
@@ -1798,6 +2046,7 @@ function weatherJustUpdated(){
 
 var _weatherStamp = 0;
 var _rainAt = 0;
+var _rainHM = '';      /* the city-local "HH:MM" the rain is expected, kept as text */
 var _rainAtP = 0;
 var _rainAbsent = false;
 var _rainChance = null;
@@ -1808,12 +2057,28 @@ function weatherClockString(ts){
   var hh = (hf === '12') ? (h % 12 || 12) : h;
   return pad2(hh) + ':' + pad2(dt.getMinutes()) + (hf === '12' ? (h < 12 ? ' AM' : ' PM') : '');
 }
+/* weather times should read in the same zone as the clock: when the clock
+   follows the city, shift the instant by the city's offset before formatting */
+function weatherTimeString(ts){
+  if(followCityTime()){
+    var dt = new Date((ts || Date.now()) + _tzOffsetSec * 1000);
+    var hf = gs(K.hourFmt) || '12';
+    var h = dt.getUTCHours();
+    var hh = (hf === '12') ? (h % 12 || 12) : h;
+    return pad2(hh) + ':' + pad2(dt.getUTCMinutes()) + (hf === '12' ? (h < 12 ? ' AM' : ' PM') : '');
+  }
+  return weatherClockString(ts);
+}
 function renderRainNote(){
   var el = $('w-raintime');
   if(!el) return;
-  if(_rainAt){
-    var word = 'Expect rain around ';
-    el.textContent = word + weatherClockString(_rainAt);
+  if(_rainHM){
+    /* the hour and its meridian come from one city-local string, so they
+       can never disagree — this is what fixes the AM/PM drift */
+    el.textContent = 'Expect rain around ' + prayerClock(_rainHM);
+  }
+  else if(_rainAt){
+    el.textContent = 'Expect rain around ' + weatherTimeString(_rainAt);
   }
   /* the card's own rain line already says "no rain" when there is none, so
      only add a little texture when the chance is there but very low */
@@ -1824,7 +2089,7 @@ function renderRainNote(){
 }
 function refreshWeatherStamp(){
   var upd = $('w-updated');
-  if(upd && _weatherStamp) upd.textContent = 'Last updated ' + weatherClockString(_weatherStamp);
+  if(upd && _weatherStamp) upd.textContent = 'Last updated ' + weatherTimeString(_weatherStamp);
   renderRainNote();
 }
 
@@ -1842,6 +2107,7 @@ function renderWeather(d){
   setText($('w-rain'),rain);
   _weatherStamp = d.ts || Date.now();
   _rainAt = d.rainAt || 0;
+  _rainHM = d.rainHM || '';
   _rainAtP = d.rainAtP || 0;
   _rainAbsent = !!d.rainAbsent;
   _rainChance = (d.rain == null) ? null : Number(d.rain);
@@ -1851,7 +2117,7 @@ function renderWeather(d){
   }
   renderRainNote();
   var upd = $('w-updated');
-  if(upd) upd.textContent = 'Last updated ' + weatherClockString(_weatherStamp);
+  if(upd) upd.textContent = 'Last updated ' + weatherTimeString(_weatherStamp);
   /* let the card grow/shrink with the new temperature and description */
   var wEl = $('weather');
   var wsz = (parseJSON(gs(K.sizes),{}) || {}).weather;
@@ -2019,19 +2285,23 @@ function loadWeather(force){
       /* Open-Meteo's daily max is literally the highest hourly probability.
          Pick that same peak hour so the headline % and the time agree. */
       var bestT = 0, bestP = -1, wetT = 0, wetP = 0;
+      var bestHM = '', wetHM = '';
       for(var i = 0; i < hTimes.length; i++){
         var t = new Date(hTimes[i]).getTime();
         if(isNaN(t) || t < Date.now() - 30 * 60000) continue;
         var p = Number(hProb[i]);
         if(isNaN(p)) p = 0;
-        if(p > bestP){ bestP = p; bestT = t; }
+        /* the "HH:MM" slice is the city-local wall time, exactly as Open-Meteo
+           sends it — keep it as text so no zone parse can shift it */
+        var hm = String(hTimes[i]).substr(11, 5);
+        if(p > bestP){ bestP = p; bestT = t; bestHM = hm; }
         if(!wetT && (p >= 40 || Number(hRain[i] || 0) >= 0.2 || Number(hPrec[i] || 0) >= 0.2)){
-          wetT = t; wetP = p;
+          wetT = t; wetP = p; wetHM = hm;
         }
       }
-      var rainAt = 0, rainAtP = 0;
-      if(bestP >= 20){ rainAt = bestT; rainAtP = bestP; }
-      else if(wetT){ rainAt = wetT; rainAtP = wetP; }
+      var rainAt = 0, rainAtP = 0, rainHM = '';
+      if(bestP >= 20){ rainAt = bestT; rainAtP = bestP; rainHM = bestHM; }
+      else if(wetT){ rainAt = wetT; rainAtP = wetP; rainHM = wetHM; }
       var dailyMax = (daily.precipitation_probability_max && daily.precipitation_probability_max[0] != null)
                 ? Number(daily.precipitation_probability_max[0]) : null;
       var chance = (bestP >= 0) ? bestP : dailyMax;
@@ -2060,6 +2330,7 @@ function loadWeather(force){
         code: cur.weather_code,
         rain: chance,
         rainAt: rainAt,
+        rainHM: rainHM,
         rainAtP: rainAtP,
         rainAbsent: (!rainAt && bestP >= 0 && bestP < 5),
         utcOffset: j.utc_offset_seconds,
@@ -3085,6 +3356,8 @@ function openPanel(){
   overlay.style.display = 'flex';
   loadUI();
   refreshRichLabels();
+  syncAllRangeFills();
+  refreshClockLivePreviews();
   /* a slow tick keeps a rich dropdown's face in step when another control
      changes its native value (the quote presets do this to each other) */
   if(!_richSyncTimer) _richSyncTimer = setInterval(function(){
@@ -3140,7 +3413,7 @@ function buildClockStyleGrid(current){
     var c = document.createElement('div');
     c.className = 'clock-card';
     c.setAttribute('data-id',cs.id);
-    c.innerHTML = '<div class="cname">' + cs.name + '</div><div class="cprev">' + cs.prev + '</div>';
+    c.innerHTML = '<div class="cname">' + cs.name + '</div><div class="cprev">' + clockPreviewText(cs.id) + '</div>';
     c.onclick = function(){
       selectIn(g,'.clock-card','data-id',cs.id);
       ss(K.clockStyle,cs.id);
@@ -3364,9 +3637,9 @@ function buildFontColorSwatches(){
 function buildGlassTintSwatches(){
   var g = $('glass-tint-swatches');
   if(!g) return;
-  if(builtOnce('glasstint')){ selectIn(g,'.swatch','data-color',gs(K.glassTint) || GLASS_TINTS[0]); return; }
+  if(builtOnce('glasstint')){ selectIn(g,'.swatch','data-color',gs(K.glassTint) || GLASS_TINTS[GLASS_TINTS.length - 1]); return; }
   g.innerHTML = '';
-  var cur = gs(K.glassTint) || GLASS_TINTS[0];
+  var cur = gs(K.glassTint) || GLASS_TINTS[GLASS_TINTS.length - 1];
   GLASS_TINTS.forEach(function(col){
     var s = document.createElement('div');
     s.className = 'swatch';
@@ -3392,6 +3665,19 @@ function markPreset(id){
   Array.prototype.forEach.call(row.querySelectorAll('.preset'),function(b){
     b.classList.toggle('on',b.getAttribute('data-preset') === id);
   });
+}
+/* highlight whichever preset the stored values match — a fresh install matches
+   "liquid", so that is the one that reads as chosen */
+function markMatchingGlassPreset(){
+  var blur  = parseInt(gs(K.glassBlur)  || '2',10);
+  var alpha = parseInt(gs(K.glassAlpha) || '21',10);
+  var tint  = gs(K.glassTint) || GLASS_TINTS[GLASS_TINTS.length - 1];
+  var hit = '';
+  Object.keys(GLASS_PRESETS).forEach(function(k){
+    var p = GLASS_PRESETS[k];
+    if(p.blur === blur && p.alpha === alpha && p.tint === tint) hit = k;
+  });
+  markPreset(hit);
 }
 
 function buildBrowserGrid(){
@@ -3530,10 +3816,10 @@ function buildPosControls(){
         el.style.right  = 'auto';
         el.style.bottom = 'auto';
         el.style.transform = 'none';
-        showPeek(labels[id] + ' · ' + label + ' ' + v + ' px');
+        showPeek(labels[id] + ' · ' + label + ' ' + v + ' px', inp);
         commitPos();
       };
-      inp.onpointerdown = function(){ startPeek(); };
+      inp.onpointerdown = function(){ startPeek(inp); };
       inp.onpointerup   = function(){ endPeek(); commitPos(); };
       inp.onpointercancel = endPeek;
       inp.onchange = commitPos;
@@ -3559,20 +3845,51 @@ function buildPosControls(){
 }
 
 /* ── peek: fade the settings panel while dragging a position slider ── */
-function showPeek(text){
+/* While a slider is held, every other control fades out so the widget behind
+   the panel can be seen moving. The slider being dragged keeps full strength —
+   fading it too was making the panel look empty and the slider hard to aim. */
+var _peekDim = [];
+function clearPeekDim(){
+  _peekDim.forEach(function(node){ node.classList.remove('peek-dim'); });
+  _peekDim = [];
+}
+function dimPeekPath(el){
+  clearPeekDim();
+  if(!el || !el.closest) return;
+  var box = el.closest('#panel, .win-panel, .prayer-panel, .changelog-panel');
+  if(!box) return;
+  /* keep the whole slider row (label + track + value) solid, not just the
+     input, so the thing under your finger never fades */
+  var node = el.closest('.pos-row') || el;
+  while(node && node !== box){
+    var parent = node.parentElement;
+    if(!parent) break;
+    Array.prototype.forEach.call(parent.children, function(ch){
+      if(ch === node) return;
+      ch.classList.add('peek-dim');
+      _peekDim.push(ch);
+    });
+    node = parent;
+  }
+}
+function showPeek(text, el){
   var hud = $('peek-hud'), ov = $('overlay');
+  var already = !!(ov && ov.classList.contains('peek'));
   if(ov) ov.classList.add('peek');
   if(hud){ hud.textContent = text; hud.classList.add('on'); }
+  if(el && !already) dimPeekPath(el);
 }
-function startPeek(){
+function startPeek(el){
   var ov = $('overlay'), hud = $('peek-hud');
   if(ov) ov.classList.add('peek');
   if(hud) hud.classList.add('on');
+  dimPeekPath(el);
 }
 function endPeek(){
   var ov = $('overlay'), hud = $('peek-hud');
   if(ov) ov.classList.remove('peek');
   if(hud) hud.classList.remove('on');
+  clearPeekDim();
   Array.prototype.forEach.call(
     document.querySelectorAll('.win-modal.peek,.prayer-modal.peek'),
     function(m){ m.classList.remove('peek'); }
@@ -3588,7 +3905,7 @@ function peekUpdate(text){
 function wirePeek(el, label){
   if(!el) return;
   el.addEventListener('pointerdown', function(){
-    startPeek();
+    startPeek(el);
     var hud = $('peek-hud');
     if(hud) hud.textContent = (typeof label === 'function') ? label() : label;
   });
@@ -3603,7 +3920,7 @@ function wireWinPeek(el, modalId, label){
   var m = $(modalId);
   function on(){
     if(m) m.classList.add('peek');
-    startPeek();
+    startPeek(el);
     var hud = $('peek-hud');
     if(hud) hud.textContent = (typeof label === 'function') ? label() : label;
   }
@@ -3641,7 +3958,7 @@ function loadUI(){
   var ias = $('icalsize'), iasv = $('icalsize-v');
   if(ias){
     var csz = parseInt(gs(K.calSize),10);
-    if(!(csz > 0)) csz = 10;
+    if(!(csz > 0)) csz = 9;
     ias.value = csz;
     if(iasv) iasv.textContent = csz + 'px';
   }
@@ -3664,14 +3981,15 @@ function loadUI(){
   var fci = $('ifontcolor');
   if(fci) fci.value = gs(K.fontColor) || '#ffffff';
   var gti = $('iglasstint');
-  if(gti) gti.value = tintToHex(gs(K.glassTint) || 'rgba(255,255,255,1)');
+  if(gti) gti.value = tintToHex(gs(K.glassTint) || GLASS_TINTS[GLASS_TINTS.length - 1]);
 
-  var blur  = parseInt(gs(K.glassBlur)  || '30',10);
-  var alpha = parseInt(gs(K.glassAlpha) || '10',10);
+  var blur  = parseInt(gs(K.glassBlur)  || '2',10);
+  var alpha = parseInt(gs(K.glassAlpha) || '21',10);
   var bs = $('iglassblur'), as = $('iglassalpha');
   var bv = $('iglassblur-v'), av = $('iglassalpha-v');
   if(bs){ bs.value = blur;  if(bv) bv.textContent = blur + 'px'; }
   if(as){ as.value = alpha; if(av) av.textContent = alpha + '%'; }
+  markMatchingGlassPreset();
 
   buildAnimGrid();
   buildBrowserGrid();
@@ -3869,6 +4187,7 @@ applyGradient();
 applyMotion();
 renderGreeting();
 updateTabName();
+detectBrowserDefault();
 applyBrowserFav(gs(K.fav) || '');
 renderSC();
 applySearchEngine();
@@ -3906,6 +4225,7 @@ initPrayer();
 measureBases();
 applySizes();
 applyPositions();
+syncAllRangeFills();
 
 /* one-time repair: older builds stored scale-derived sizes computed from
    DEFAULT_SIZE (too small) and a 0.8 compact preset. Re-apply once with the
@@ -4148,6 +4468,22 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
   if(igw)    igw.onchange    = function(){ ss(K.greetWeight,igw.value);   applyGreetingStyle(); };
   if(igs2)   igs2.onchange   = function(){ ss(K.greetItalic,igs2.value);  applyGreetingStyle(); };
   if(igsize) igsize.onchange = function(){ ss(K.greetSize,igsize.value);  applyGreetingStyle(); };
+
+  /* glass style + tint mode: one class flip on <body>, applied at once */
+  var gss = $('glass-style-seg');
+  if(gss) gss.addEventListener('click', function(e){
+    var b = e.target.closest('.seg-btn');
+    if(!b) return;
+    ss(K.glassStyle, b.getAttribute('data-glass') === 'liquid' ? 'liquid' : 'classic');
+    applyGlassSettings();
+  });
+  var gts = $('glass-tint-seg');
+  if(gts) gts.addEventListener('click', function(e){
+    var b = e.target.closest('.seg-btn');
+    if(!b) return;
+    ss(K.glassTintMode, b.getAttribute('data-tintmode') === 'adaptive' ? 'adaptive' : 'manual');
+    applyGlassSettings();
+  });
 
   var bs = $('iglassblur'), as = $('iglassalpha');
   var bv = $('iglassblur-v'), av = $('iglassalpha-v');
@@ -4398,25 +4734,25 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     ss(K.videoZoom,vz.value);
     if(vzv) vzv.textContent = vz.value + '%';
     applyVideoView();
-    showPeek('Wallpaper zoom ' + vz.value + '%');
+    showPeek('Wallpaper zoom ' + vz.value + '%', vz);
   };
   if(vx) vx.oninput = function(){
     ss(K.videoX,vx.value);
     if(vxv) vxv.textContent = vx.value;
     applyVideoView();
-    showPeek('Wallpaper left / right ' + vx.value);
+    showPeek('Wallpaper left / right ' + vx.value, vx);
   };
   if(vy) vy.oninput = function(){
     ss(K.videoY,vy.value);
     if(vyv) vyv.textContent = vy.value;
     applyVideoView();
-    showPeek('Wallpaper up / down ' + vy.value);
+    showPeek('Wallpaper up / down ' + vy.value, vy);
   };
   /* same peek as the layout sliders: hide the panel while dragging so you
      can actually watch the wallpaper move */
   [vz,vx,vy].forEach(function(inp){
     if(!inp) return;
-    inp.addEventListener('pointerdown',startPeek);
+    inp.addEventListener('pointerdown', function(){ startPeek(inp); });
     inp.addEventListener('pointerup',endPeek);
     inp.addEventListener('pointercancel',endPeek);
     inp.addEventListener('blur',endPeek);
@@ -4745,6 +5081,8 @@ function openWin(id){
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   refreshRichLabels();
+  syncAllRangeFills();
+  refreshClockLivePreviews();
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){ m.classList.add('in'); });
   });
@@ -4795,7 +5133,9 @@ function openWelcome(){
     cat: gs(K.quoteCat) || 'general',
     wall: 'gradient',
     grad: gradientIndex(),
-    motion: motionMode()
+    motion: motionMode(),
+    glass: glassStyle(),
+    tintMode: glassTintMode()
   };
 
   function paintSeg(segId, attr, value){
@@ -4927,15 +5267,17 @@ function openWelcome(){
     selectIn(g,'.swatch','data-color',cur || GLASS_TINTS[0]);
   }
   function syncObGlass(){
-    var blur  = parseInt(gs(K.glassBlur)  || '30', 10);
-    var alpha = parseInt(gs(K.glassAlpha) || '10', 10);
-    var tint  = gs(K.glassTint) || 'rgba(255,255,255,1)';
+    var blur  = parseInt(gs(K.glassBlur)  || '2', 10);
+    var alpha = parseInt(gs(K.glassAlpha) || '21', 10);
+    var tint  = gs(K.glassTint) || GLASS_TINTS[GLASS_TINTS.length - 1];
     var bs = $('ob-glass-blur'), as = $('ob-glass-alpha');
     var bv = $('ob-glass-blur-v'), av = $('ob-glass-alpha-v');
     if(bs) bs.value = blur;
     if(as) as.value = alpha;
     if(bv) bv.textContent = blur + 'px';
     if(av) av.textContent = alpha + '%';
+    paintSeg('ob-glass-style','data-glass', choice.glass || glassStyle());
+    paintSeg('ob-glass-tintmode','data-tintmode', choice.tintMode || glassTintMode());
     var ci = $('ob-glass-tint');
     if(ci) ci.value = tintToHex(tint);
     buildObGlassSwatches(tint);
@@ -4945,6 +5287,7 @@ function openWelcome(){
       if(p.blur === blur && p.alpha === alpha && p.tint === tint) match = k;
     });
     obGlassPreset(match);
+    syncAllRangeFills();
   }
   function applyObGlass(){
     var bs = $('ob-glass-blur'), as = $('ob-glass-alpha');
@@ -5078,6 +5421,16 @@ function openWelcome(){
 
   segClick('ob-hour','data-hour', function(v){ choice.hour = v; });
   segClick('ob-timesrc','data-src', function(v){ choice.timeSrc = v; });
+  segClick('ob-glass-style','data-glass', function(v){
+    choice.glass = (v === 'liquid') ? 'liquid' : 'classic';
+    ss(K.glassStyle, choice.glass);
+    applyGlassSettings();
+  });
+  segClick('ob-glass-tintmode','data-tintmode', function(v){
+    choice.tintMode = (v === 'adaptive') ? 'adaptive' : 'manual';
+    ss(K.glassTintMode, choice.tintMode);
+    applyGlassSettings();
+  });
   segClick('ob-motion','data-motion', function(v){
     choice.motion = v;
     ss(K.motion, v);
@@ -5303,20 +5656,21 @@ function extSyncTimeSource(){
       var b = e.target.closest('.seg-btn');
       if(!b) return;
       ss(K.timeSource, b.getAttribute('data-src') || 'device');
-      refreshTimeSource();
-      extSyncTimeSource();
+      onTimeSourcePicked();
     });
   });
 })();
 
-/* ── calendar window: browse January to December of the current year ── */
+/* ── calendar window: browse any month of any year (years roll over on paging) ── */
 var _calWinMonth = null;
+var _calWinYear = null;
 function renderCalWin(anim){
   var grid = $('calwin-grid');
   if(!grid) return;
   var now = wallNow();
   if(_calWinMonth == null) _calWinMonth = now.mon;
-  var y = now.year, m = _calWinMonth;
+  if(_calWinYear == null)  _calWinYear  = now.year;
+  var y = _calWinYear, m = _calWinMonth;
   var firstDow = (new Date(y, m, 1).getDay() + 6) % 7;   /* Monday first */
   var daysInMonth = new Date(y, m + 1, 0).getDate();
   var daysPrev = new Date(y, m, 0).getDate();
@@ -5327,7 +5681,7 @@ function renderCalWin(anim){
     out += '<span class="cal-day other">' + (daysPrev - i + 1) + '</span>';
   }
   for(var d = 1; d <= daysInMonth; d++){
-    var today = (m === now.mon && d === now.date);
+    var today = (y === now.year && m === now.mon && d === now.date);
     out += '<span class="cal-day' + (today ? ' today' : '') + '">' + d + '</span>';
   }
   var cells = firstDow + daysInMonth, nextDay = 1;
@@ -5349,6 +5703,7 @@ function renderCalWin(anim){
 }
 function openCalWin(){
   _calWinMonth = wallNow().mon;
+  _calWinYear  = wallNow().year;
   extSyncTimeSource();
   renderCalWin(true);
   openWin('calendar-modal');
@@ -5356,14 +5711,20 @@ function openCalWin(){
 (function(){
   var p = $('calwin-prev');
   if(p) p.onclick = function(){
-    var m = (_calWinMonth == null) ? wallNow().mon : _calWinMonth;
-    _calWinMonth = (m + 11) % 12;
+    var now = wallNow();
+    var m = (_calWinMonth == null) ? now.mon : _calWinMonth;
+    var y = (_calWinYear  == null) ? now.year : _calWinYear;
+    m--; if(m < 0){ m = 11; y--; }
+    _calWinMonth = m; _calWinYear = y;
     renderCalWin(true);
   };
   var n = $('calwin-next');
   if(n) n.onclick = function(){
-    var m = (_calWinMonth == null) ? wallNow().mon : _calWinMonth;
-    _calWinMonth = (m + 1) % 12;
+    var now = wallNow();
+    var m = (_calWinMonth == null) ? now.mon : _calWinMonth;
+    var y = (_calWinYear  == null) ? now.year : _calWinYear;
+    m++; if(m > 11){ m = 0; y++; }
+    _calWinMonth = m; _calWinYear = y;
     renderCalWin(true);
   };
 })();
@@ -5380,7 +5741,7 @@ function buildClockWinGrid(){
     var c = document.createElement('div');
     c.className = 'clock-card';
     c.setAttribute('data-id', cs.id);
-    c.innerHTML = '<div class="cname">' + cs.name + '</div><div class="cprev">' + cs.prev + '</div>';
+    c.innerHTML = '<div class="cname">' + cs.name + '</div><div class="cprev">' + clockPreviewText(cs.id) + '</div>';
     c.onclick = function(){
       selectIn(g,'.clock-card','data-id',cs.id);
       ss(K.clockStyle, cs.id);
@@ -5932,8 +6293,7 @@ function closeEngineMenu(){
   var its = $('itimesource');
   if(its) its.onchange = function(){
     ss(K.timeSource, its.value);
-    refreshTimeSource();
-    extSyncTimeSource();
+    onTimeSourcePicked();
   };
 
   var tinc = $('iglasstint');

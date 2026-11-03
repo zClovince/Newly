@@ -5,13 +5,46 @@ This file is included in every release ZIP, so the history travels with the exte
 
 ---
 
+## 2.0.0 — Liquid Glass
+
+Newly 1.0 was glassmorphism: frosted, translucent, pleasant. 2.0 is Liquid Glass — the material now bends what sits behind it, and every surface that floats over the page is cut from the same recipe.
+
+### The material
+
+- **A real lens, not just blur.** Cards and sheets keep the compositor blur, then pass the backdrop through a small inline SVG displacement lens with a runtime-generated inward map. The rim gathers the scene like a curved pane of glass while the middle stays calm and readable.
+- **Tuned for a new tab.** A single displacement pass instead of stacked chromatic layers, blur left on the compositor, and a gentle 20px refraction keep it quiet over a full-screen wallpaper.
+- **Yours to soften.** Liquid or Classic, plus blur, opacity and tint, all update live. A fresh install starts on Liquid at 2px blur, 21% opacity and the deepest tint; Classic is one click away in Settings.
+- **A quiet fallback.** A short fps probe after launch drops to Classic and says so, rather than leaving a slow machine to struggle.
+- **Credit where it is due.** The material follows Apple's *Adopting Liquid Glass* guidance ([developer.apple.com](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass)), and the SVG-displacement approach is inspired by the liquid-glass CSS recipes collected at [freefrontend.com](https://freefrontend.com/). The lens, its runtime map and the sheet structure are Newly's own implementation.
+
+### Sheets that finally behave
+
+- **No more dark flash.** Panels and dialogs animate position only; the scrim fades its own colour. A group opacity below 1 switches `backdrop-filter` off in Chromium, which is what made a freshly opened window wear the wrong, darker glass for a moment.
+- **Readable by design.** A sheet is a denser cut of the material (18–44px blur) and the scene behind it gets a soft 8–16px blur on its own layer, so text always has something calm underneath without turning the page into a solid slab.
+- **The search bar's recipe, everywhere.** Settings, weather, clock, calendar, greeting, quote, prayer and changelog now use the same scrim-then-sheet structure that already made the search popover feel right.
+- **Peek stays honest.** While a layout slider is dragged, only the controls off the path dim; the row you are holding and the widget you are moving stay solid.
+
+### Controls
+
+- **Apple-style slider.** A thin track with the travelled part in the accent colour and a soft white capsule thumb, kept in sync from every range input.
+- **Segmented control.** A quiet pill with a raised capsule for the selected segment.
+- **Selection boxes match the glass.** Text fields, selects and the rich dropdown share one translucent lift, hairline, inner highlight and focus ring; the floating list is a real frosted sheet.
+- **Scrollbars stay inside.** The bar is an inset pill that never crosses a panel's rounded corners, and scrolling never chains to the page behind.
+- **Clock and date previews are live.** Style cards, 12/24-hour options and date formats show the current time and date — including when the clock follows the weather city.
+
+### Fixed along the way
+
+- **Calendar follows the real time source.** The month grid now reads the same device-or-weather-city clock as the time, including year rollover.
+- **Weather rain times use the chosen clock.** The “expect rain around…” line now follows 12/24-hour correctly at noon and midnight.
+- **The little polish pass.** The calendar's default card is a little smaller, scroll edges are calmer, and opening any sheet no longer shows a different glass for a few frames.
+
 ## 1.0.0 — Newly
 
 Newly is a calm, glassy new tab page. Everything rests on one screen, and you decide what stays, where it sits, and how it feels. Here's how everything gently unfolds :)
 
 ### The look
 
-- **Liquid Glass, everywhere.** Every card, panel, button and popup is frosted glass — a soft blur, a quiet lift on hover, and springy little animations, in the spirit of Apple's iOS and macOS. The blur, tint and thickness are yours to soften or deepen whenever you like.
+- **Glassmorphism, everywhere.** Every card, panel, button and popup is frosted glass — a soft blur, a quiet lift on hover, and springy little animations, in the spirit of Apple's iOS and macOS. (2.0 replaces this with the real Liquid Glass lens.) The blur, tint and thickness are yours to soften or deepen whenever you like.
 - **Two ways to dress the background.** Settle on **Calm Gradient** — a still, soft colour scheme (Nebula, Midnight, Aurora, Sunset, Ocean or Graphite) that asks a little less of your battery — or let **Video Wallpaper** play your own clip quietly behind the glass, with gentle zoom and pan. New tabs open on the gradient, so you are never met with a black screen.
 
 ### The widgets

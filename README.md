@@ -5,17 +5,7 @@ A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you ch
 
 **Repository:** [github.com/zClovince/Newly](https://github.com/zClovince/Newly) — free, source included, fork it and make it yours.
 
-### What's new in 2.0 — Liquid Glass
-
-- **A real glass lens** — behind every card and sheet, the scene is bent through a small SVG displacement lens, not just blurred. The rim gathers the backdrop like a curved pane; the middle stays calm and readable.
-- **Sheets without the flash** — panels no longer fade their opacity on open (which disabled `backdrop-filter` for a moment and showed the wrong, darker glass). The scrim fades its colour instead, and the scene behind a sheet blurs softly on its own layer.
-- **One recipe everywhere** — settings, every widget window, prayer and changelog now share the search bar's scrim-then-sheet structure, so content is readable over any wallpaper.
-- **Apple-style controls** — a thin accent-filled slider with a white capsule thumb, and a pill segmented control with a raised capsule for the selected segment.
-- **Calmer details** — selection boxes and rich dropdowns match the glass, scrollbars stay inside rounded panels, and clock/date option previews show the live time and date.
-- **Fixed** — the calendar follows the chosen time source (device or weather city), and the weather's rain-time line follows 12/24-hour correctly.
-- **Credit** — the design follows Apple's [Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass) guidance; the SVG-displacement approach is inspired by the liquid-glass CSS recipes collected at [freefrontend.com](https://freefrontend.com/). The lens, its runtime map and the sheet structure are Newly's own implementation.
-
-### Everything else
+### About Newly :)
 
 - **Liquid Glass everywhere** — every card, panel, button and popup is made of the same material, with adjustable blur, tint and thickness. (1.0 was glassmorphism; 2.0 adds the refractive lens.)
 - **A wallpaper you choose** — **Calm Gradient** (a still, soft colour scheme that asks a little less of your battery) or **Video Wallpaper** (your own clip behind the glass, with zoom and pan). New tabs open on the gradient, so there's never a black screen.

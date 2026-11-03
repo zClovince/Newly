@@ -1,0 +1,351 @@
+============================================================
+  CARA INSTALL & PAKAI
+  Newly 1.0
+  (Bahasa Indonesia)
+============================================================
+
+Terima kasih sudah mau pakai! File ini menjelaskan cara memasang
+ekstensi "Newly" di Chrome, Brave, Edge, browser
+berbasis Chromium lainnya, dan Firefox, plus cara mengaturnya.
+
+Penting: file ZIP TIDAK bisa langsung dipasang. Kamu harus
+mengextract (unzip) dulu foldernya, baru dimasukkan ke browser.
+
+
+------------------------------------------------------------
+1. APA YANG KAMU BUTUHKAN
+------------------------------------------------------------
+
+- Browser: Google Chrome, Brave, Microsoft Edge, Vivaldi,
+  Opera, atau Firefox 128 ESR / lebih baru.
+- Folder ekstensi ini, berisi:
+    manifest.json
+    newtab.html
+    script.js
+    fonts/            (font Plus Jakarta Sans bawaan)
+    README.md
+    CHANGELOG.md      (riwayat versi)
+    CARA-INSTALL.txt  (file yang sedang kamu baca)
+    LICENSE
+- Koneksi internet (untuk cuaca dan sebagian kategori quote).
+  Tanpa internet pun tetap jalan, hanya memakai quote bawaan.
+
+Catatan: wallpaper video TIDAK disertakan, karena biasanya kamu
+ingin pakai video pribadi. Nanti tinggal pilih sendiri dari
+Pengaturan > Wallpaper.
+
+
+------------------------------------------------------------
+2. CARA INSTALL DI CHROME / BRAVE / EDGE (SEKALI SAJA)
+------------------------------------------------------------
+
+Langkah 1 - Extract file
+  - Kalau kamu dapat file .zip, klik kanan > "Extract All" /
+    "Extract Here" sampai keluar sebuah FOLDER.
+  - Pastikan di dalam folder tersebut langsung terlihat file
+    "manifest.json". Jangan sampai ada folder di dalam folder
+    (misalnya ZIP_di_dalam_ZIP/Folder/Folder/manifest.json).
+    Kalau susunannya salah, browser akan bilang "Manifest file
+    is missing or unreadable".
+
+Langkah 2 - Buka halaman ekstensi
+  - Chrome  : ketik  chrome://extensions   lalu Enter
+  - Brave   : ketik  brave://extensions    lalu Enter
+  - Edge    : ketik  edge://extensions     lalu Enter
+  - Vivaldi : ketik  vivaldi://extensions  lalu Enter
+
+Langkah 3 - Nyalakan Developer Mode
+  - Di kanan atas (atau kiri bawah, tergantung browser) ada
+    tombol "Developer mode" / "Mode pengembang". Nyalakan.
+
+Langkah 4 - Load unpacked
+  - Klik tombol "Load unpacked" / "Muat yang belum dikemas".
+  - Pilih FOLDER ekstensi tadi (folder yang berisi manifest.json).
+  - Ekstensi "Newly" akan muncul di daftar.
+
+Langkah 5 - Selesai
+  - Buka tab baru (Ctrl + T). Halaman baru akan langsung memakai
+    Newly.
+  - Kalau tab baru masih tampilan lama, tutup semua tab baru lalu
+    buka lagi, atau restart browser sekali.
+
+Selamat! Ekstensi sudah terpasang.
+
+
+------------------------------------------------------------
+2B. CARA INSTALL DI FIREFOX (128 ESR ATAU LEBIH BARU)
+------------------------------------------------------------
+
+Firefox tidak punya tombol "Load unpacked". Folder yang sama
+dipakai, tapi dimuat lewat menu khusus pengembang:
+
+Langkah 1 - Buka halaman add-on sementara
+  - Ketik  about:debugging#/runtime/this-firefox  di address bar,
+    lalu Enter.
+
+Langkah 2 - Load Temporary Add-on
+  - Klik "Load Temporary Add-on...".
+  - Masuk ke folder ekstensi ini, pilih file "manifest.json",
+    lalu Open.
+
+Langkah 3 - Selesai
+  - Buka tab baru (Ctrl + T). Halaman baru langsung memakai
+    Newly.
+  - Buka Pengaturan > Browser, pilih kartu Firefox kalau ingin
+    ikon tab berubah jadi logo Firefox.
+
+Penting soal Firefox:
+  - Add-on ini bersifat SEMENTARA. Kalau Firefox ditutup, add-on
+    hilang dan harus di-load lagi lewat about:debugging.
+  - Saat add-on dihapus/ditutup, pengaturan yang tersimpan di
+    localStorage ikut terhapus. Biasakan Export settings dulu.
+  - Supaya permanen, add-on harus ditandatangani (signed) di
+    addons.mozilla.org. Untuk tes pribadi, cara sementara di atas
+    sudah cukup.
+  - Firefox tidak bisa membaca level baterai, tapi pilihan wallpaper
+    tetap bekerja penuh: Calm Gradient atau Video Wallpaper, tanpa
+    perlu data baterai sama sekali.
+  - Kalau video wallpaper tidak bisa diputar (codec tidak
+    didukung), halaman otomatis memakai gradien, bukan layar hitam.
+
+Catatan:
+  - Instalasi baru langsung memakai Calm Gradient supaya tidak ada
+    layar hitam. Video bisa dinyalakan kapan saja dari Tab Wallpaper.
+
+
+------------------------------------------------------------
+3. CARA UPDATE KE VERSI BARU
+------------------------------------------------------------
+
+Kalau kamu dapat versi baru (misalnya dari teman atau dari GitHub):
+
+  - Timpa file lama dengan file baru di folder yang SAMA,
+    ATAU extract versi baru ke folder baru.
+  - Buka halaman ekstensi (chrome://extensions dan seterusnya).
+  - Klik tombol "Reload" (ikon panah melingkar) pada kartu
+    "Newly".
+  - Buka tab baru.
+
+Pengaturanmu (posisi widget, ukuran, quote favorit, kota cuaca)
+tersimpan di browser dan TIDAK hilang saat update, karena tidak
+disimpan di dalam folder ekstensi.
+
+Saran: sebelum update, buka Pengaturan > About > "Export settings"
+untuk membackup pengaturan ke file JSON. Kalau ada apa-apa,
+tinggal "Import settings".
+
+
+------------------------------------------------------------
+4. CARA PAKAI (PENGATURAN)
+------------------------------------------------------------
+
+Klik ikon gerigi (gear) di pojok kanan bawah untuk membuka
+Pengaturan. Untuk mengatur posisi widget, pakai tombol kotak-kotak
+(layout) di SEBELAH gear.
+
+Tab Greeting
+  - Nama kamu, gaya sapaan, atau sapaan custom.
+  - Warna, ketebalan, ukuran, dan gaya miring teks sapaan.
+  - Sapaan mengikuti jam: pagi mulai 05:00, dan setelah 20:00
+    menjadi "Good night" (bukan evening).
+
+Tab Shortcuts
+  - Tambah, ubah, hapus shortcut (Google, YouTube, Spotify,
+    ChatGPT, dan lain-lain).
+  - Ikon diambil otomatis dari favicon situs lalu DISIMPAN OFFLINE.
+    Jadi tab baru berikutnya tidak perlu mengunduh ikon lagi.
+    Saat kamu mengubah URL shortcut, ikonnya diperbarui otomatis.
+  - Kalau gagal, akan muncul kotak huruf pertama.
+
+Tab Clock (Jam)
+  - Format 12/24 jam, tampilkan detik atau tidak,
+    format tanggal (panjang/pendek/US/ISO/sembunyikan).
+  - Slider "Clock & date size" (16-80 px) untuk mengubah besar
+    jam dan tanggal sekaligus.
+
+Tab Display (Tampilan)
+  - Ganti font (termasuk font Google Fonts).
+  - Slider blur dan transparansi kaca (glass).
+  - Preset kaca: Clear / Frosted / Tinted / Liquid.
+  - Pilih gaya animasi panel.
+  - "Settings panel size": Small / Default / Large
+    (hanya ukuran jendela pengaturan, bukan widget).
+
+Tab Widgets (Widget)
+  - Nyalakan/matikan: Greeting, Jam, Search, Shortcuts,
+    Cuaca, Quote.
+  - Pilih mesin pencari.
+  - Cuaca: isi nama kota (contoh: Jakarta), pilih Celsius
+    atau Fahrenheit. Tidak memakai GPS sama sekali.
+    Ada baris "Updated HH:MM" yang menunjukkan kapan data
+    terakhir diambil, dan prakiraan hujan ditulis dengan
+    kalimat (misalnya "Likely to rain 70%").
+  - Quote:
+      * Category: General, Philosophy, Bible verse,
+        Quran verse, Custom (milikmu sendiri), Random mix.
+      * Toggle "Change quotes automatically" (ON/OFF) dan
+        kolom "Every ... seconds" (minimal 5 detik).
+        Kalau toggle OFF, quote tidak akan berganti sendiri.
+        Quote custom buatanmu juga tidak pernah ditimpa.
+      * "New quote now": ganti quote saat itu juga.
+      * Custom: tulis quote dan nama penulisnya, lalu
+        "Save custom quote".
+  - Layout: tombol "Reset" per widget dan "Reset all widgets".
+  - Performance: "Pause wallpaper on hidden tab" — video
+    berhenti saat tab tidak aktif.
+
+Tab Browser
+  - Gaya tab browser (tab name), nama tab custom, favicon,
+    dan logo browser.
+
+Tab Wallpaper
+  - Pilihan wallpaper di paling atas: "Calm Gradient" atau
+    "Video Wallpaper". Bagian untuk pilihan yang tidak dipakai
+    otomatis disembunyikan.
+  - Calm Gradient: warna statis yang lembut dan sedikit lebih
+    hemat baterai dibanding video.
+  - Video Wallpaper: pilih file video (MP4), tombol hapus video,
+    dan bagian "Video view" dengan slider Zoom (100-250%),
+    geser kiri/kanan (Left) dan atas/bawah (Up), plus
+    "Reset video view".
+  - Bagian "Gradient colours" berisi enam warna (Nebula,
+    Midnight, Aurora, Sunset, Ocean, Graphite). Gradien juga
+    dipakai kalau belum ada video atau videonya tidak bisa
+    diputar.
+  - Instalasi baru mulai dengan Calm Gradient, jadi halaman
+    tidak pernah kosong hitam.
+
+Tab About (sebelumnya ":)"
+  - Kredit, catatan privasi, dan daftar shortcut keyboard.
+  - Klik nama TheKaveman12 untuk membuka proyek aslinya.
+  - Di bagian paling bawah ada "Export settings" dan
+    "Import settings" untuk backup.
+
+Mengatur posisi & ukuran widget
+  - Klik tombol kotak-kotak (layout) di kanan bawah,
+    tepat di sebelah tombol gear.
+  - Tarik garis kecil di atas widget untuk MEMINDAHKAN.
+  - Tarik titik biru di pojok kanan bawah untuk MENGUBAH
+    UKURAN. Isi widget (teks, ikon, tile) ikut membesar.
+  - Muncul tombol bulat "reset" di pojok kanan atas widget
+    untuk mengembalikan HANYA widget itu ke ukuran semula.
+  - Di tab Widgets > Layout ada "Reset all widgets".
+  - Klik tombol layout lagi untuk keluar dari mode edit.
+
+Tombol kecil di widget quote
+  - Ikon panah melingkar di pojok kanan atas widget quote
+    (muncul saat kursor diarahkan ke widget) untuk mengganti
+    quote saat itu juga.
+
+Keyboard
+  - Ctrl + K atau Command + K : fokus ke kotak pencarian
+  - "/"                       : fokus ke kotak pencarian
+  - Esc                       : tutup pengaturan
+
+
+------------------------------------------------------------
+5. KALAU ADA MASALAH
+------------------------------------------------------------
+
+Tab baru tidak berubah
+  - Pastikan ekstensi aktif (tidak di-disable) di halaman
+    ekstensi.
+  - Pastikan tidak ada ekstensi lain yang juga mengubah
+    "New Tab" (matikan sementara).
+  - Restart browser, lalu buka tab baru lagi.
+
+"Manifest file is missing or unreadable"
+  - Kamu memilih folder yang salah. Pilih folder yang
+    LANGSUNG berisi manifest.json, bukan folder induknya.
+
+Video wallpaper tidak muncul
+  - Format yang paling aman: MP4 (H.264).
+  - Coba video lain yang lebih kecil.
+  - Kamera atau tab lain yang sedang memutar video bisa
+    membuat pemutaran terasa berat; tutup tab tersebut.
+  - Kalau "Calm Gradient" yang dipilih, video memang diganti
+    gradien. Pilih "Video Wallpaper" untuk memutar video.
+
+Cuaca tidak muncul
+  - Kalau muncul "City not found - check the spelling", berarti
+    nama kotanya tidak dikenali. Periksa ejaan (contoh:
+    "Jakarta", "Bandung", "Yogyakarta"), atau tambahkan nama
+    negara untuk kota di luar Indonesia (contoh: "Tokyo").
+  - Kalau muncul "Could not load weather ... your connection",
+    berarti internet atau Open-Meteo sedang bermasalah. Data
+    cuaca disimpan 30 menit, jadi coba lagi beberapa saat.
+  - Pesan yang sama juga muncul di kartu Prayer times, karena
+    keduanya memakai kota yang sama.
+
+Font custom tidak berubah
+  - Ketik nama font persis seperti di fonts.google.com
+    (contoh: "Playfair Display"), lalu klik "Apply font".
+  - Di bawah tombol akan muncul pesan hijau kalau berhasil,
+    atau merah "Couldn't find ..." kalau namanya salah.
+  - Kalau gagal, font sebelumnya tetap dipakai, jadi tampilan
+    tidak rusak. Perbaiki ejaan lalu coba lagi.
+  - Font bawaan Newly (Plus Jakarta Sans) sudah tertanam,
+    jadi tetap tampil rapi tanpa internet.
+
+Quote kosong atau "Offline"
+  - Kategori General, Bible, dan Quran mengambil dari internet.
+    Kalau offline, akan tampil quote bawaan.
+  - Kategori Philosophy selalu memakai koleksi bawaan,
+    jadi selalu jalan.
+
+Quote tidak berganti otomatis
+  - Nyalakan toggle "Change quotes automatically" di tab
+    Widgets, lalu isi kolom "Every ... seconds" (minimal 5).
+  - Kalau toggle OFF, quote sengaja tidak berganti sendiri.
+
+Pengaturan hilang setelah membersihkan data browser
+  - Pengaturan disimpan di localStorage browser. Kalau kamu
+    menghapus "cookies and site data", pengaturan bisa hilang.
+  - Selalu simpan backup lewat Export settings.
+
+Ekstensi hilang setelah browser update
+  - Ekstensi "load unpacked" memang bisa dinonaktifkan
+    browser setelah update besar. Buka halaman ekstensi,
+    nyalakan Developer mode, lalu "Load unpacked" lagi ke
+    folder yang sama. Pengaturan lama tetap ada.
+
+
+------------------------------------------------------------
+6. PRIVASI
+------------------------------------------------------------
+
+- Tidak ada akun, tidak ada login, tidak ada tracking.
+- Pengaturan disimpan lokal di browser (localStorage).
+- Video wallpaper disimpan lokal di browser (IndexedDB).
+- Ikon shortcut di-cache offline di browser supaya tidak
+  diunduh ulang setiap tab baru.
+- Tidak memakai GPS/lokasi otomatis. Widget cuaca hanya
+  mengirim NAMA KOTA yang kamu tulis ke Open-Meteo.
+- Kalau kategori Qur'an sedang dipakai, nama kota yang sama
+  dikirim juga ke Aladhan untuk waktu shalat.
+- Quote hanya mengirim permintaan ke dummyjson.com,
+  bible-api.com, dan alquran.cloud saat kategori tersebut
+  dipakai.
+- Tidak ada data yang dijual atau dikirim ke pihak lain.
+
+
+------------------------------------------------------------
+7. KREDIT & LISENSI
+------------------------------------------------------------
+
+- Dibuat & didesain oleh: Clovince (github.com/zClovince)
+- Basis awal: TheKaveman12 - Custom New Tab for Brave (v1.0)
+- Ide kode & polishing: ChatGPT, Claude, Gemini
+- Pass performa, polish UI, cuaca, quote, pencarian, backup: DeepSeek
+- Cuaca & geocoding: Open-Meteo
+- Waktu shalat: Aladhan
+- Quote: dummyjson, bible-api.com, alquran.cloud
+- Terjemahan Qur'an: Muhammad Marmaduke Pickthall
+  (public domain)
+
+Lisensi: CC0 1.0 Universal (public domain).
+Bebas dipakai, diubah, dan dibagikan, tanpa perlu izin.
+Lihat file LICENSE untuk teks lengkapnya.
+
+unCopyright (c) Clovince 2026.
+Selamat memakai, dan bagikan ke temanmu kalau suka!

@@ -1,101 +1,3058 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Tab</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&display=swap');
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="tab-title">Newly</title>
+<link id="tab-favicon" rel="icon" type="image/png">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
-        body {
-            margin: 0;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-        }
+/* ── bundled default font: Plus Jakarta Sans (latin + latin-ext, variable) ──
+   Stored in /fonts so the new tab never has to reach the network for its
+   own typeface. */
+@font-face{
+  font-family:'Plus Jakarta Sans';
+  font-style:normal;
+  font-weight:300 800;
+  font-display:swap;
+  src:url('fonts/PlusJakartaSans-latin-ext.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face{
+  font-family:'Plus Jakarta Sans';
+  font-style:normal;
+  font-weight:300 800;
+  font-display:swap;
+  src:url('fonts/PlusJakartaSans-latin.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
 
-        #background {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            object-fit: cover;
-            z-index: -1;
-        }
+:root{
+  --glass-blur:30px;
+  --glass-bg:rgba(255,255,255,0.10);
+}
 
-        #shortcuts {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            z-index: 1;
-        }
+body{
+  height:100vh;width:100vw;overflow:hidden;
+  font-family:'Plus Jakarta Sans','SF Pro Display','SF Pro Text','-apple-system','BlinkMacSystemFont','Helvetica Neue',Arial,sans-serif;
+  background:#0a0a0a;
+}
 
-        .shortcut {
-            width: 60px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 15px;
-            background-color: rgba(255, 255, 255, 0.8);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-            text-decoration: none;
-            overflow: hidden;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
+#background{
+  position:fixed;inset:0;width:100%;height:100%;
+  object-fit:cover;z-index:0;
+  transform:translate(var(--vid-x,0px),var(--vid-y,0px)) scale(var(--vid-z,1));
+  transform-origin:center center;
+  will-change:transform;
+}
 
-        .shortcut:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.3);
-        }
+/* battery-saver / no-video gradient layer.
+   The calm gradient is a still base plus one soft, slowly drifting layer.
+   Motion is a transform on a single oversized pseudo-element, so it lives on
+   the compositor and never repaints the whole page each frame — that is what
+   keeps it kind to a modest laptop. The level lives on body[data-motion]. */
+#fallback-bg{
+  position:fixed;inset:0;z-index:0;display:none;overflow:hidden;
+  background:var(--grad-bg,linear-gradient(125deg,#241a44,#0d2438 32%,#3a1b3d 62%,#08182b));
+}
+#fallback-bg::before{
+  content:"";position:absolute;inset:-22%;
+  background-image:var(--grad-blob,none);
+  background-repeat:no-repeat;
+  transform:translate3d(0,0,0) scale(1.15);
+  will-change:transform;
+}
+/* the calm cycle length is a variable so the Drift speed slider can drive it */
+body[data-motion="slow"] #fallback-bg::before{animation:grad-float var(--grad-dur,40s) ease-in-out infinite;}
+body[data-motion="flow"] #fallback-bg::before{animation:grad-float calc(var(--grad-dur,40s) * 0.45) ease-in-out infinite;}
+@keyframes grad-float{
+  0%   {transform:translate3d(-5%,-4%,0) scale(1.14) rotate(0deg);}
+  33%  {transform:translate3d(5%,3%,0)  scale(1.24) rotate(5deg);}
+  66%  {transform:translate3d(-3%,5%,0) scale(1.16) rotate(-4deg);}
+  100% {transform:translate3d(-5%,-4%,0) scale(1.14) rotate(0deg);}
+}
+body.battery-saver #fallback-bg{display:block;}
+body.battery-saver #background{display:none;}
+/* no video chosen yet: paint the gradient instead of a flat black page */
+body.no-video #fallback-bg{display:block;}
+body.no-video #background{display:none;}
+/* paused wallpaper (hidden tab / saver) is removed from the paint tree so a
+   browser cannot keep showing a frozen frame while it is meant to be off */
+body.wall-paused #background{visibility:hidden;}
+/* if the browser cannot decode the chosen video (missing codec), keep the
+   gradient instead of showing a black rectangle */
+body.video-failed #fallback-bg{display:block;}
+body.video-failed #background{display:none;}
 
-        .shortcut img {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-        }
+/* ── Apple-style scrollbar ── */
+::-webkit-scrollbar{width:4px;background:transparent;}
+::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,0.18);
+  border-radius:4px;
+}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.30);}
+::-webkit-scrollbar-track{background:transparent;}
+/* Firefox has no ::-webkit-scrollbar; this keeps the same thin, quiet bar.
+   Guarded by a Mozilla-only property so Chromium keeps its custom scrollbar. */
+@supports (-moz-appearance:none){
+  *{
+    scrollbar-width:thin;
+    scrollbar-color:rgba(255,255,255,0.18) transparent;
+  }
+}
 
-        #clock {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            color: white;
-            font-size: 36px;
-            font-family: 'Roboto Mono', monospace;
-            z-index: 1;
-        }
-    </style>
+/* ── liquid glass base ── */
+.glass{
+  background:var(--glass-bg);
+  backdrop-filter:blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(160%);
+  border:1px solid rgba(255,255,255,0.22);
+  border-top-color:rgba(255,255,255,0.40);
+  border-left-color:rgba(255,255,255,0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.28),
+    inset 0 -1px 0 rgba(255,255,255,0.05),
+    0 8px 32px rgba(0,0,0,0.40),
+    0 2px 8px rgba(0,0,0,0.20);
+  position:relative;
+}
+.glass::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(135deg,rgba(255,255,255,0.07) 0%,transparent 60%);
+  pointer-events:none;
+}
+
+/* ── draggable elements ── */
+.draggable{position:fixed;z-index:10;cursor:default;}
+.draggable.dragging{cursor:grabbing;transition:none!important;}
+
+.drag-handle{
+  position:absolute;top:-10px;left:50%;transform:translateX(-50%);
+  width:32px;height:6px;border-radius:3px;
+  background:rgba(255,255,255,0.35);
+  cursor:grab;opacity:0;transition:opacity 0.2s;z-index:2;
+  pointer-events:none;
+}
+body.layout-editing .drag-handle{pointer-events:auto;}
+body.layout-editing .draggable:hover .drag-handle{opacity:1;}
+
+.resize-knob{
+  position:absolute;bottom:-6px;right:-6px;
+  width:14px;height:14px;border-radius:50%;
+  background:rgba(90,200,250,0.85);
+  border:2px solid rgba(255,255,255,0.6);
+  cursor:nwse-resize;opacity:0;pointer-events:none;
+  transition:opacity 0.2s;z-index:3;
+}
+body.layout-editing .draggable:hover .resize-knob{opacity:1;pointer-events:auto;}
+
+/* ── shortcuts ── */
+#shortcuts{
+  bottom:92px;
+  left:50%;
+  transform:translateX(-50%);
+  padding:8px;
+  border-radius:22px;
+  max-width:calc(100vw - 48px);
+}
+#shortcuts .w-body{
+  display:flex;gap:10px;
+}
+.shortcut{
+  width:60px;height:60px;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:16px;text-decoration:none;overflow:hidden;
+  background:rgba(255,255,255,0.10);
+  /* an inset ring instead of a border: when the card is scaled down the
+     right/bottom edge no longer rasterises a pixel thicker than the rest */
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.16);
+  transform:translateY(0) scale(1);
+  transition:transform 0.28s cubic-bezier(0.34,1.56,0.64,1),
+             background 0.22s ease,
+             box-shadow 0.22s ease;
+}
+.shortcut:hover{
+  transform:translateY(-3px) scale(1.06);
+  background:rgba(255,255,255,0.19);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.30),0 8px 20px rgba(0,0,0,0.28);
+}
+.shortcut:active{
+  transform:translateY(-1px) scale(0.97);
+  transition-duration:0.12s;
+}
+.shortcut img{width:36px;height:36px;border-radius:8px;}
+.shortcut .sc-letter{
+  font-size:22px;font-weight:600;color:#fff;
+  text-transform:uppercase;letter-spacing:0.02em;
+}
+
+/* ── datetime ── */
+#datetime{
+  top:20px;right:20px;
+  text-align:center;color:#fff;
+  /* the whole card grows with the clock size, not just the digits: padding,
+     radius and minimum width all follow the type size */
+  padding:var(--clock-pad-y,14px) var(--clock-pad-x,22px);
+  border-radius:var(--clock-radius,18px);
+  min-width:var(--clock-min-w,175px);
+}
+#date{font-size:13px;opacity:0.75;margin-bottom:var(--clock-gap,5px);letter-spacing:0.05em;}
+#time{font-size:30px;font-weight:bold;letter-spacing:0.03em;}
+
+/* ── greeting ── */
+#greeting-wrap{
+  top:20px;left:50%;transform:translateX(-50%);
+  padding:14px 28px;border-radius:20px;
+  color:#fff;text-align:center;white-space:nowrap;
+}
+#greeting-text{
+  font-size:22px;font-weight:400;font-style:normal;
+  letter-spacing:0.04em;opacity:0.92;
+  text-shadow:0 1px 4px rgba(0,0,0,0.55),0 0 16px rgba(0,0,0,0.30);
+}
+
+/* ── search bar ── */
+#searchbar{
+  bottom:34px;left:50%;transform:translateX(-50%);
+}
+.search-wrap{
+  display:flex;align-items:center;
+  padding:10px 16px;border-radius:32px;
+  width:500px;max-width:88vw;gap:10px;
+}
+.search-wrap img{width:22px;height:22px;flex-shrink:0;display:block;}
+.search-wrap input{
+  flex:1;font-size:15px;background:transparent;
+  border:none;outline:none;color:#fff;font-family:inherit;
+}
+.search-wrap input::placeholder{color:rgba(255,255,255,0.5);}
+.search-wrap button{
+  background:none;border:none;cursor:pointer;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  width:22px;height:22px;flex-shrink:0;
+}
+.search-wrap button svg{display:block;width:20px;height:20px;fill:rgba(255,255,255,0.65);}
+.search-wrap button:hover svg{fill:#5ac8fa;}
+
+/* ── icon buttons (same Liquid Glass recipe as the widgets) ── */
+#gear-btn,#layout-btn{
+  position:fixed;
+  width:46px;height:46px;border-radius:14px;
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter:blur(var(--glass-blur)) saturate(160%);
+  border:1px solid rgba(255,255,255,0.22);
+  border-top-color:rgba(255,255,255,0.40);
+  border-left-color:rgba(255,255,255,0.28);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.28),0 8px 24px rgba(0,0,0,0.35);
+  cursor:pointer;z-index:300;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;
+}
+#gear-btn{bottom:34px;right:24px;}
+#layout-btn{bottom:34px;right:80px;left:auto;transition:background 0.3s,border-color 0.3s;}
+/* rotate the SVG, not the blurred surface (keeps the GPU from re-rasterising) */
+#gear-btn svg,#layout-btn svg{transition:transform 0.3s cubic-bezier(0.34,1.3,0.64,1);}
+#gear-btn:hover svg{transform:rotate(60deg);}
+#layout-btn:hover svg{transform:rotate(-60deg);}
+#layout-btn.active{
+  background:rgba(90,200,250,0.35)!important;
+  border:1px solid rgba(90,200,250,0.7)!important;
+}
+body.layout-editing .draggable.glass{
+  outline:1.5px dashed rgba(90,200,250,0.50);
+  outline-offset:3px;
+}
+
+/* ── device status tile (sits left of the layout + gear buttons) ── */
+#status-tile{
+  position:fixed;bottom:34px;right:138px;z-index:300;
+  height:46px;padding:0 14px;border-radius:14px;
+  display:flex;align-items:center;gap:9px;
+  max-width:190px;
+  color:#fff;cursor:pointer;
+  font-size:11px;letter-spacing:0.02em;font-family:inherit;
+  transition:background 0.2s ease,scale 0.2s ease,translate 0.26s ease,opacity 0.22s ease,filter 0.22s ease;
+}
+#status-tile:hover{background:rgba(255,255,255,0.20);}
+#status-tile:active{scale:0.97;}
+#status-tile:focus-visible{outline:2px solid rgba(90,200,250,0.85);outline-offset:3px;}
+.st-net{display:flex;align-items:center;gap:6px;min-width:0;}
+.st-dot{
+  width:7px;height:7px;border-radius:50%;flex-shrink:0;
+  background:#8e8e93;box-shadow:0 0 0 3px rgba(142,142,147,0.16);
+  transition:background 0.2s ease,box-shadow 0.2s ease;
+}
+.st-dot.on{background:#34c759;box-shadow:0 0 0 3px rgba(52,199,89,0.16);}
+.st-dot.warn{background:#ff9f0a;box-shadow:0 0 0 3px rgba(255,159,10,0.16);}
+.st-dot.off{background:#ff453a;box-shadow:0 0 0 3px rgba(255,69,58,0.16);}
+#st-net-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* parked battery UI must stay invisible even where .sp-row/.st-batt set display */
+#status-tile [hidden],#status-pop [hidden]{display:none!important;}
+
+/* detail popover above the tile */
+.status-pop{
+  position:fixed;bottom:92px;right:24px;z-index:320;
+  width:min(304px,calc(100vw - 48px));
+  padding:14px 16px 12px;border-radius:20px;
+  color:var(--fg);display:none;
+}
+.status-pop.open{display:block;animation:sp-in 0.22s cubic-bezier(0.34,1.2,0.64,1);}
+@keyframes sp-in{
+  from{opacity:0;transform:translateY(8px) scale(0.98);}
+  to{opacity:1;transform:none;}
+}
+.sp-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;}
+.sp-title{font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;opacity:0.82;}
+.sp-rows{display:flex;flex-direction:column;gap:0;}
+.sp-row{
+  display:flex;justify-content:space-between;gap:12px;align-items:baseline;
+  padding:7px 0;font-size:11px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+}
+.sp-row:last-child{border-bottom:none;}
+.sp-k{color:rgba(255,255,255,0.52);flex-shrink:0;font-size:10px;letter-spacing:0.05em;text-transform:uppercase;}
+.sp-v{text-align:right;color:rgba(255,255,255,0.92);line-height:1.45;}
+.sp-label{padding-top:10px;}
+.sp-label .lbl{margin-bottom:4px;font-size:10px;}
+.sp-foot{display:flex;align-items:center;gap:8px;padding-top:10px;flex-wrap:wrap;}
+#sp-test-out{font-size:10px;color:rgba(255,255,255,0.55);}
+.sp-v.new{color:#9fe0ff;}
+
+@media (max-width:1180px){
+  #status-tile{bottom:92px;right:24px;}
+  .status-pop{bottom:150px;}
+}
+@media (max-width:960px){
+  #quote{bottom:180px;}
+  #status-tile{bottom:150px;}
+  .status-pop{bottom:208px;}
+}
+
+/* ── overlay + panel ── */
+#overlay{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,0.5);
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+  display:none;align-items:center;justify-content:center;
+  /* fade-in overlay */
+  opacity:0;
+  transition:opacity 0.28s ease;
+  pointer-events:none;
+}
+#overlay.open{
+  display:flex;
+  pointer-events:auto;
+}
+#overlay.open-anim{opacity:1;}
+
+/* Panel open/close animation */
+#panel{
+  width:var(--panel-w,540px);max-width:96vw;max-height:92vh;
+  border-radius:24px;color:#fff;
+  display:flex;flex-direction:column;overflow:hidden;
+  transform:scale(0.94) translateY(12px);
+  opacity:0;
+  transition:transform 0.32s cubic-bezier(0.34,1.30,0.64,1), opacity 0.28s ease;
+}
+#overlay.open-anim #panel{
+  transform:scale(1) translateY(0);
+  opacity:1;
+}
+
+/* peek mode — while a layout slider is being dragged, get the panel and the
+   dimmer out of the way so the widget movement is actually visible */
+#overlay.peek{background:rgba(0,0,0,0.04);-webkit-backdrop-filter:none;backdrop-filter:none;transition:background 0.12s ease;}
+#overlay.open-anim.peek #panel{
+  opacity:0.10;
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+  box-shadow:none;
+  transition:opacity 0.12s ease;
+}
+#peek-hud{
+  position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-6px);
+  z-index:950;padding:7px 15px;border-radius:999px;
+  font-size:11.5px;letter-spacing:0.03em;color:#fff;
+  background:rgba(20,20,24,0.62);
+  border:1px solid rgba(255,255,255,0.22);
+  box-shadow:0 8px 26px rgba(0,0,0,0.4);
+  -webkit-backdrop-filter:blur(14px) saturate(1.4);
+  backdrop-filter:blur(14px) saturate(1.4);
+  opacity:0;pointer-events:none;
+  transition:opacity 0.14s ease,transform 0.14s ease;
+}
+#peek-hud.on{opacity:1;transform:translateX(-50%) translateY(0);}
+
+.ph{
+  padding:18px 20px 0;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.ph h2{font-size:16px;font-weight:600;}
+.xbtn{
+  width:28px;height:28px;border-radius:50%;
+  background:rgba(255,255,255,0.13);border:none;
+  color:#fff;font-size:14px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background 0.2s, transform 0.2s;
+}
+.xbtn:hover{background:rgba(255,255,255,0.24);transform:scale(1.12);}
+/* programmatic focus (opening a window) must not paint the white circle that
+   the prayer panel used to show; keyboard users still get a soft ring */
+.xbtn:focus{outline:none;}
+.xbtn:focus-visible{outline:2px solid rgba(159,224,255,0.75);outline-offset:2px;}
+
+.tabs{
+  display:flex;gap:4px;padding:12px 20px 0;
+  flex-shrink:0;flex-wrap:wrap;
+}
+.tbtn{
+  flex:0 0 auto;padding:7px 9px;border-radius:10px;
+  background:transparent;
+  border:1px solid rgba(255,255,255,0.15);
+  color:rgba(255,255,255,0.55);font-size:10px;cursor:pointer;
+  font-family:inherit;
+  transition:background 0.18s,color 0.18s,border-color 0.18s;
+}
+.tbtn:hover{
+  background:rgba(255,255,255,0.10);
+  color:rgba(255,255,255,0.85);
+}
+.tbtn.on{
+  background:rgba(255,255,255,0.18);
+  color:#fff;border-color:rgba(255,255,255,0.32);
+}
+
+/* Panel body — Apple fade-blur scroll edge */
+.pbody{
+  padding:16px 20px 22px;
+  overflow-y:auto;
+  flex:1;
+  /* fade top/bottom edges for Apple feel */
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,black 28px,black calc(100% - 28px),transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0,black 28px,black calc(100% - 28px),transparent 100%);
+}
+
+.pane{
+  display:none;flex-direction:column;gap:13px;
+  /* pane transition */
+  opacity:0;transform:translateY(8px);
+  transition:opacity 0.22s ease, transform 0.22s ease;
+}
+.pane.on{
+  display:flex;
+  opacity:1;transform:translateY(0);
+  animation:pane-in 0.22s ease forwards;
+}
+/* the outgoing pane keeps painting for a moment instead of vanishing: it
+   lifts out of the flow and fades away while the new one settles in */
+.pbody{position:relative;}
+.pane.out{
+  display:flex;position:absolute;left:20px;right:20px;top:16px;
+  pointer-events:none;
+  animation:pane-out 0.18s ease forwards!important;
+}
+@keyframes pane-out{
+  from{opacity:1;transform:translateY(0);}
+  to{opacity:0;transform:translateY(-6px);}
+}
+@keyframes pane-in{
+  from{opacity:0;transform:translateY(8px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+.lbl{font-size:11px;color:rgba(255,255,255,0.6);display:block;margin-bottom:4px;}
+
+/* Fix select dropdown — transparent options cause white-on-white */
+.fi{
+  width:100%;padding:9px 12px;border-radius:10px;
+  background:rgba(40,40,50,0.82);
+  border:1px solid rgba(255,255,255,0.20);
+  color:#fff;font-size:14px;outline:none;
+  font-family:inherit;
+  transition:border-color 0.18s, background-color 0.18s;
+}
+.fi:focus{border-color:rgba(255,255,255,0.42);background:rgba(50,50,65,0.90);}
+.fi::placeholder{color:rgba(255,255,255,0.38);}
+/* Selects only get the dropdown arrow */
+select.fi{
+  -webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,255,255,0.5)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+  padding-right:32px;
+}
+/* Force dark bg for select options */
+.fi option{
+  background:#1e1e2e;
+  color:#fff;
+}
+/* Text inputs — clean, no arrow */
+input.fi{
+  -webkit-appearance:none;appearance:none;
+  background-image:none;
+  padding-right:12px;
+}
+
+/* ── rich dropdown (replaces native <select>) ──
+   The native select is kept underneath, invisible but intact, and this button
+   wears its face. The floating list shares the menu language of the search
+   engine picker: soft, frosted, a tick on the choice you have. */
+.rich{position:relative;display:block;}
+.rich > select{
+  position:absolute;left:0;top:0;width:100%;height:100%;
+  opacity:0;pointer-events:none;
+}
+.rich-trig{
+  display:flex;align-items:center;width:100%;box-sizing:border-box;
+  text-align:left;padding:9px 12px;border-radius:10px;
+  background:rgba(40,40,50,0.82);
+  border:1px solid rgba(255,255,255,0.20);
+  color:#fff;font-size:14px;font-family:inherit;cursor:pointer;
+  transition:border-color 0.18s,background-color 0.18s;
+}
+.rich-trig:hover{border-color:rgba(255,255,255,0.30);}
+.rich-trig:focus-visible{outline:2px solid rgba(159,224,255,0.75);outline-offset:2px;}
+.rich-trig.open{border-color:rgba(255,255,255,0.42);background:rgba(50,50,65,0.90);}
+.rich-trig .rv{
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  text-align:left;
+}
+.rich-trig .rv.ph{color:rgba(255,255,255,0.38);}
+.rich-trig .caret{
+  width:0;height:0;margin-left:10px;flex-shrink:0;
+  border-left:5px solid transparent;border-right:5px solid transparent;
+  border-top:6px solid rgba(255,255,255,0.5);
+}
+.rich-menu{
+  position:fixed;z-index:1200;min-width:180px;padding:6px;border-radius:14px;
+  display:none;flex-direction:column;gap:2px;color:var(--fg);
+  background:rgba(32,34,48,0.96);
+  -webkit-backdrop-filter:blur(16px) saturate(150%);backdrop-filter:blur(16px) saturate(150%);
+  border:1px solid rgba(255,255,255,0.14);
+  box-shadow:0 12px 28px rgba(0,0,0,0.35);
+}
+.rich-menu.open{display:flex;animation:rich-in 0.18s cubic-bezier(0.34,1.3,0.64,1);}
+@keyframes rich-in{from{opacity:0;transform:translateY(5px) scale(0.97);}to{opacity:1;transform:none;}}
+.rich-menu[data-up="1"].open{display:flex;animation:rich-in-up 0.18s cubic-bezier(0.34,1.3,0.64,1);}
+@keyframes rich-in-up{from{opacity:0;transform:translateY(-5px) scale(0.97);}to{opacity:1;transform:none;}}
+.rich-menu.closing{
+  display:flex;pointer-events:none;
+  animation:rich-out 0.16s cubic-bezier(0.4,0,0.6,1) forwards;
+}
+@keyframes rich-out{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(5px) scale(0.97);}}
+.rich-menu[data-up="1"].closing{animation:rich-out-up 0.16s cubic-bezier(0.4,0,0.6,1) forwards;}
+@keyframes rich-out-up{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(-5px) scale(0.97);}}
+.rich-item{
+  display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:9px;
+  font-size:12px;cursor:pointer;color:var(--fg);background:transparent;
+  border:none;font-family:inherit;text-align:left;width:100%;transition:background 0.15s;
+}
+.rich-item:hover{background:rgba(255,255,255,0.14);}
+.rich-item:focus-visible{outline:2px solid rgba(159,224,255,0.75);outline-offset:-2px;}
+.rich-item.on{background:rgba(90,200,250,0.20);color:#fff;}
+.rich-item .tick{margin-left:auto;font-size:11px;color:rgba(90,200,250,0.95);}
+.rich-item:not(.on) .tick{visibility:hidden;}
+
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+
+.sbtn{
+  padding:9px;border-radius:12px;
+  background:rgba(90,200,250,0.25);
+  border:1px solid rgba(90,200,250,0.50);
+  color:#fff;font-size:13px;cursor:pointer;width:100%;
+  font-family:inherit;
+  transition:background 0.18s, transform 0.15s;
+}
+.sbtn:hover{background:rgba(90,200,250,0.42);transform:scale(1.01);}
+.sbtn:active{transform:scale(0.97);}
+
+.rbtn{
+  padding:9px;border-radius:12px;
+  background:rgba(255,80,80,0.20);
+  border:1px solid rgba(255,80,80,0.42);
+  color:#fff;font-size:13px;cursor:pointer;width:100%;
+  font-family:inherit;
+  transition:background 0.18s, transform 0.15s;
+}
+.rbtn:hover{background:rgba(255,80,80,0.38);transform:scale(1.01);}
+.rbtn:active{transform:scale(0.97);}
+
+.sci{
+  display:grid;grid-template-columns:1fr 1fr auto;
+  gap:7px;align-items:center;
+  padding:9px;border-radius:11px;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.10);
+  margin-bottom:6px;
+  transition:background 0.18s;
+}
+.sci:hover{background:rgba(255,255,255,0.10);}
+.sci input{
+  padding:5px 9px;border-radius:7px;
+  background:rgba(255,255,255,0.10);
+  border:1px solid rgba(255,255,255,0.17);
+  color:#fff;font-size:11px;outline:none;width:100%;
+  font-family:inherit;
+}
+.sci input::placeholder{color:rgba(255,255,255,0.35);}
+.sdel{
+  background:rgba(255,80,80,0.20);
+  border:1px solid rgba(255,80,80,0.38);
+  border-radius:7px;color:#fff;font-size:11px;
+  padding:5px 8px;cursor:pointer;
+  transition:background 0.15s;
+}
+.sdel:hover{background:rgba(255,80,80,0.45);}
+.sadd{
+  padding:8px;border-radius:10px;
+  border:1px dashed rgba(255,255,255,0.22);
+  background:transparent;color:rgba(255,255,255,0.45);
+  font-size:12px;cursor:pointer;width:100%;text-align:center;
+  font-family:inherit;
+  transition:background 0.18s, color 0.18s;
+}
+.sadd:hover{background:rgba(255,255,255,0.07);color:#fff;}
+
+#vdrop{
+  border:2px dashed rgba(255,255,255,0.22);border-radius:14px;
+  padding:28px 16px;text-align:center;cursor:pointer;
+  color:rgba(255,255,255,0.50);font-size:13px;
+  transition:background 0.18s;
+}
+#vdrop:hover{background:rgba(255,255,255,0.06);}
+#vdrop.dg{background:rgba(90,200,250,0.10);border-color:#5ac8fa;}
+#vstatus{font-size:11px;color:rgba(255,255,255,0.50);text-align:center;}
+
+/* browser icon grid */
+.browser-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+}
+.browser-card{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:10px 4px;border-radius:14px;cursor:pointer;min-width:0;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.10);
+  transition:background 0.2s,border-color 0.2s,transform 0.15s;
+  font-size:10px;color:rgba(255,255,255,0.6);text-align:center;
+}
+.browser-card:hover{background:rgba(255,255,255,0.13);transform:scale(1.04);}
+.browser-card.selected{
+  background:rgba(90,200,250,0.18);
+  border-color:rgba(90,200,250,0.55);
+  color:#fff;
+}
+.browser-card img{width:36px;height:36px;border-radius:8px;object-fit:contain;}
+
+/* wallpaper chooser (Video pane) */
+.wall-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;}
+.wall-card{
+  display:flex;align-items:center;justify-content:center;
+  height:52px;border-radius:14px;cursor:pointer;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.16);
+  transition:transform 0.15s,border-color 0.2s,box-shadow 0.2s,background 0.2s;
+}
+.wall-card:hover{transform:scale(1.03);border-color:rgba(255,255,255,0.34);background:rgba(255,255,255,0.10);}
+.wall-card.selected{
+  background:rgba(90,200,250,0.14);
+  border-color:rgba(90,200,250,0.75);
+  box-shadow:inset 0 0 0 1px rgba(90,200,250,0.55),0 0 0 3px rgba(90,200,250,0.16);
+}
+.wall-card .wall-title{
+  font-size:12px;font-weight:600;letter-spacing:0.02em;
+  color:rgba(255,255,255,0.92);
+}
+.wall-card.selected .wall-title{color:#ffffff;}
+
+/* static-gradient picker (Video pane) */
+.grad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px;}
+.grad-card{
+  position:relative;height:56px;border-radius:14px;cursor:pointer;
+  border:1px solid rgba(255,255,255,0.16);
+  background-size:200% 200%;
+  transition:transform 0.15s,border-color 0.2s,box-shadow 0.2s;
+}
+.grad-card:hover{transform:scale(1.04);border-color:rgba(255,255,255,0.34);}
+.grad-card.selected{
+  border-color:rgba(90,200,250,0.75);
+  box-shadow:inset 0 0 0 1px rgba(90,200,250,0.55),0 0 0 3px rgba(90,200,250,0.16);
+}
+.grad-card span{
+  position:absolute;left:0;right:0;bottom:6px;text-align:center;
+  font-size:10px;color:rgba(255,255,255,0.92);
+  text-shadow:0 1px 4px rgba(0,0,0,0.6);
+}
+
+/* custom browser icon upload */
+.browser-custom-wrap{
+  margin-top:6px;
+  padding:10px;border-radius:12px;
+  background:rgba(255,255,255,0.05);
+  border:1px dashed rgba(255,255,255,0.18);
+}
+.browser-custom-wrap label.lbl{margin-bottom:6px;}
+
+/* font preview cards */
+.font-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+.font-card{
+  padding:12px;border-radius:12px;cursor:pointer;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.10);
+  transition:background 0.2s,transform 0.15s;
+}
+.font-card:hover{background:rgba(255,255,255,0.12);transform:scale(1.02);}
+.font-card.selected{
+  background:rgba(90,200,250,0.18);
+  border-color:rgba(90,200,250,0.55);
+}
+.font-card .fname{font-size:11px;color:rgba(255,255,255,0.55);margin-bottom:4px;}
+.font-card .fprev{font-size:18px;color:#fff;}
+
+/* custom font result line */
+.font-status{
+  min-height:15px;margin-top:8px;font-size:11px;line-height:1.4;
+  color:rgba(255,255,255,0.55);
+}
+.font-status.ok{color:#7ee0a0;}
+.font-status.err{color:#ff9a9a;}
+
+/* clock style cards */
+.clock-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+.clock-card{
+  padding:12px;border-radius:12px;cursor:pointer;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.10);
+  text-align:center;transition:background 0.2s,transform 0.15s;
+}
+.clock-card:hover{background:rgba(255,255,255,0.12);transform:scale(1.02);}
+.clock-card.selected{
+  background:rgba(90,200,250,0.18);
+  border-color:rgba(90,200,250,0.55);
+}
+.clock-card .cname{font-size:10px;color:rgba(255,255,255,0.5);margin-bottom:6px;}
+.clock-card .cprev{font-size:16px;color:#fff;font-weight:bold;}
+
+/* position sliders */
+.pos-row{
+  display:grid;grid-template-columns:60px 1fr 36px;
+  gap:8px;align-items:center;margin-bottom:8px;
+}
+.pos-row label{font-size:11px;color:rgba(255,255,255,0.6);}
+.pos-row input[type=range]{width:100%;accent-color:#5ac8fa;}
+.pos-row span{font-size:11px;color:rgba(255,255,255,0.7);text-align:right;}
+
+.hint{font-size:11px;color:rgba(255,255,255,0.38);line-height:1.5;}
+
+/* ── toggle switch UI ── */
+.toggle-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:4px 0;
+}
+.toggle-row label{font-size:13px;color:rgba(255,255,255,0.85);}
+.toggle-row .hint{font-size:11px;color:rgba(255,255,255,0.40);}
+.tog{position:relative;width:44px;height:26px;flex-shrink:0;}
+.tog input{opacity:0;width:0;height:0;position:absolute;}
+.tog-track{
+  position:absolute;inset:0;border-radius:13px;
+  background:rgba(255,255,255,0.18);
+  border:1px solid rgba(255,255,255,0.22);
+  transition:background 0.25s;cursor:pointer;
+}
+.tog input:checked+.tog-track{background:rgba(90,200,250,0.7);}
+.tog-thumb{
+  position:absolute;top:3px;left:3px;
+  width:18px;height:18px;border-radius:50%;
+  background:#fff;
+  box-shadow:0 1px 4px rgba(0,0,0,0.3);
+  transition:transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  pointer-events:none;
+}
+.tog input:checked~.tog-thumb{transform:translateX(18px);}
+
+/* ── visible widgets list ──
+   One calm capsule: an icon, a name with a short honest description, and the
+   switch on the far right. Rows are separated by hairlines instead of being
+   loose text, so the eye can follow the whole list at once. */
+.wlist{
+  margin-top:10px;
+  border:1px solid rgba(255,255,255,0.13);
+  border-radius:18px;
+  background:rgba(255,255,255,0.055);
+  -webkit-backdrop-filter:blur(14px) saturate(140%);
+  backdrop-filter:blur(14px) saturate(140%);
+  overflow:hidden;
+}
+.wgroup-label{
+  padding:11px 14px 7px;
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:0.09em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.42);
+  background:rgba(255,255,255,0.035);
+}
+.wrow{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  padding:10px 14px;
+  position:relative;
+  transition:background 0.2s ease;
+}
+.wrow+.wrow::before,
+#prayer-settings+.wrow::before{
+  content:"";
+  position:absolute;left:14px;right:14px;top:0;height:1px;
+  background:rgba(255,255,255,0.075);
+}
+.wrow:hover{background:rgba(255,255,255,0.045);}
+.wrow-ico{
+  width:30px;height:30px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:10px;
+  font-size:14px;line-height:1;
+  background:rgba(255,255,255,0.11);
+  border:1px solid rgba(255,255,255,0.14);
+  color:rgba(255,255,255,0.78);
+  transition:background 0.2s ease,color 0.2s ease;
+}
+.wrow:hover .wrow-ico{background:rgba(255,255,255,0.16);color:rgba(255,255,255,0.95);}
+.wrow-text{
+  display:flex;flex-direction:column;gap:2px;
+  min-width:0;flex:1;
+}
+.wrow-name{
+  font-size:13px;
+  color:rgba(255,255,255,0.88);
+  line-height:1.25;
+  cursor:pointer;
+}
+.wrow-desc{
+  font-size:11px;
+  line-height:1.35;
+  color:rgba(255,255,255,0.42);
+}
+.wrow .tog{width:40px;height:24px;margin-left:2px;}
+.wrow .tog-track{border-radius:12px;}
+.wrow .tog-thumb{width:16px;height:16px;top:3px;left:3px;}
+.wrow .tog input:checked~.tog-thumb{transform:translateX(16px);}
+
+/* the prayer extras sit under their row, still inside the capsule */
+.wsub{
+  padding:0 14px 13px 55px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.wsub-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;
+}
+.wsub-row label{
+  font-size:12px;
+  color:rgba(255,255,255,0.72);
+}
+.wsub .hint{margin:2px 0 0;}
+.wsub .sbtn{align-self:flex-start;}
+
+/* ── section divider ── */
+.pdiv{height:1px;background:rgba(255,255,255,0.10);margin:2px 0;border-radius:1px;}
+
+/* ── color swatch grid ── */
+.swatch-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+.swatch{
+  width:28px;height:28px;border-radius:50%;cursor:pointer;
+  border:2px solid transparent;
+  transition:transform 0.15s,border-color 0.15s,box-shadow 0.15s;
+}
+.swatch:hover{transform:scale(1.18);box-shadow:0 0 0 3px rgba(255,255,255,0.18);}
+.swatch.selected{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,0.30);}
+
+/* ── animation style selector ── */
+.anim-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+}
+.anim-card{
+  padding:10px 6px;border-radius:12px;cursor:pointer;text-align:center;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.10);
+  font-size:10px;color:rgba(255,255,255,0.6);
+  transition:background 0.18s,border-color 0.18s,transform 0.15s;
+}
+.anim-card:hover{background:rgba(255,255,255,0.13);transform:scale(1.04);}
+.anim-card.selected{
+  background:rgba(90,200,250,0.18);
+  border-color:rgba(90,200,250,0.55);
+  color:#fff;
+}
+.anim-card .anim-icon{font-size:18px;margin-bottom:4px;}
+
+/* ── copyright ── */
+#copy{
+  position:fixed;bottom:8px;left:12px;
+  font-size:9px;color:rgba(255,255,255,0.28);
+  pointer-events:none;user-select:none;z-index:5;
+  font-family:'Courier New',monospace;
+}
+#copy a{color:inherit;text-decoration:none;pointer-events:auto;transition:color 0.2s;}
+#copy a:hover{color:rgba(255,255,255,0.62);}
+
+/* ══════════════════════════════════════════
+   widget visibility & transitions
+══════════════════════════════════════════ */
+.hidden{display:none!important;}
+/* widgets fade in/out instead of popping off the page */
+.w-hiding{opacity:0!important;filter:blur(3px);pointer-events:none!important;}
+#shortcuts,#datetime,#greeting-wrap,#searchbar,#weather,#quote{
+  transition:opacity 0.22s ease,filter 0.22s ease;
+}
+
+/* ── weather widget ── */
+#weather{
+  top:20px;left:20px;
+  padding:12px 18px;border-radius:18px;
+  color:#fff;text-align:center;min-width:152px;
+}
+.w-city{
+  font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;
+  color:rgba(255,255,255,0.62);margin-bottom:5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.w-main{display:flex;align-items:center;justify-content:center;gap:0;}
+.w-tempwrap{display:inline-flex;align-items:baseline;}
+#w-icon{font-size:23px;line-height:1;transform:translateY(1px);margin-right:-3px;}
+#w-temp{font-size:26px;font-weight:600;letter-spacing:0.02em;}
+#w-deg{
+  font-size:14px;font-weight:600;opacity:0.85;
+  margin-left:0.02em;transform:translateY(-0.62em);
+}
+#w-unit{
+  font-size:26px;font-weight:600;opacity:1;
+  margin-left:2px;letter-spacing:0.01em;
+}
+.w-sub{
+  font-size:11px;opacity:0.72;margin-top:4px;letter-spacing:0.03em;
+  display:flex;flex-direction:column;align-items:center;gap:1px;
+}
+#w-rain{display:block;}
+#w-rain:empty{display:none;}
+.w-raintime{
+  font-size:8.5px;letter-spacing:0.05em;
+  color:rgba(255,255,255,0.50);
+  margin-top:2px;
+}
+.w-updated{
+  font-size:8.5px;letter-spacing:0.06em;
+  color:rgba(255,255,255,0.42);
+  margin-top:5px;
+}
+
+/* ── quote widget ── */
+#quote{
+  bottom:34px;left:24px;
+  max-width:340px;padding:14px 18px;border-radius:18px;
+  color:#fff;
+}
+/* on narrower windows keep the quote clear of the search pill */
+@media (max-width:1100px){
+  #quote{bottom:96px;}
+}
+#q-text{font-size:13px;line-height:1.55;font-style:italic;opacity:0.94;}
+#q-text::before{content:'\201C';}
+#q-text::after{content:'\201D';}
+#q-author{font-size:11px;opacity:0.62;margin-top:6px;text-align:right;}
+#q-author::before{content:'\2014 ';}
+
+/* ── calendar widget ── */
+#calendar{
+  top:112px;right:20px;
+  width:var(--cal-w,222px);
+  padding:var(--cal-pad-y,10px) var(--cal-pad-x,12px) calc(var(--cal-pad-y,10px) + 2px);
+  border-radius:18px;
+  color:#fff;
+}
+.cal-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-shrink:0;}
+#cal-month{font-size:var(--cal-month-size,9.5px);letter-spacing:0.14em;text-transform:uppercase;opacity:0.68;}
+#cal-year{font-size:var(--cal-year-size,9px);opacity:0.38;letter-spacing:0.06em;}
+.cal-grid{
+  display:grid;grid-template-columns:repeat(7,1fr);
+  grid-auto-rows:1fr;gap:var(--cal-gap,2px);text-align:center;
+}
+.cal-dow{
+  font-size:var(--cal-dow-size,8px);letter-spacing:0.04em;opacity:0.35;
+  padding-bottom:3px;text-transform:uppercase;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.cal-day{
+  /* the row height rides on the type size, so the whole card grows with the
+     slider — and stays shrinkable when the card is made shorter by hand */
+  font-size:var(--cal-day-size,10px);line-height:1.4;
+  border-radius:var(--cal-radius,7px);
+  color:rgba(255,255,255,0.72);
+  display:flex;align-items:center;justify-content:center;
+  min-height:0;
+}
+.cal-day.other{opacity:0.16;}
+.cal-day.today{
+  background:rgba(90,200,250,0.30);
+  box-shadow:inset 0 0 0 1px rgba(90,200,250,0.55);
+  color:#fff;font-weight:600;
+}
+/* the grid is the content here: let it fill the card and never zoom, so
+   shrinking the card closes the gap instead of leaving dead space */
+#calendar .w-body{
+  zoom:1;display:flex;flex-direction:column;height:100%;
+}
+#calendar .cal-grid{flex:1;min-height:0;overflow:hidden;}
+
+/* ── prayer times widget ── */
+#prayer{
+  top:312px;right:20px;
+  width:200px;padding:11px 13px 12px;border-radius:18px;
+  color:#fff;cursor:pointer;
+}
+.pw-head{
+  display:flex;justify-content:space-between;align-items:baseline;
+  gap:8px;margin-bottom:5px;
+}
+.pw-lbl{font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.5;}
+#pw-city{font-size:9px;opacity:0.38;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pw-main{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+#pw-name{font-size:15px;font-weight:600;letter-spacing:0.01em;}
+#pw-time{font-size:12px;opacity:0.78;font-variant-numeric:tabular-nums;}
+.pw-count{font-size:10px;opacity:0.48;margin-top:3px;letter-spacing:0.03em;}
+#prayer .w-body{
+  display:flex;flex-direction:column;justify-content:center;height:100%;
+}
+/* the whole feature only exists while Quran verses are on screen */
+body:not(.quran-mode) #prayer,
+body:not(.quran-mode) #prayer-settings{display:none!important;}
+
+/* prayer reminder — a centred, dimmed popup so it owns the screen until dismissed */
+.prayer-toast{
+  position:fixed;inset:0;z-index:900;
+  display:none;align-items:center;justify-content:center;
+  padding:24px;background:rgba(0,0,0,0.5);
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+  opacity:0;pointer-events:none;transition:opacity 0.26s ease;
+}
+.prayer-toast.open{display:flex;pointer-events:auto;}
+.prayer-toast.in{opacity:1;}
+.pt-card{
+  position:relative;
+  width:min(330px,88vw);
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  padding:24px 24px 22px;border-radius:22px;color:#fff;
+  transform:scale(0.94) translateY(12px);
+  opacity:0;
+  transition:transform 0.32s cubic-bezier(0.34,1.30,0.64,1),opacity 0.26s ease;
+}
+.prayer-toast.in .pt-card{transform:none;opacity:1;}
+.pt-ico{
+  width:46px;height:46px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:12px;
+  background:rgba(90,200,250,0.22);
+  box-shadow:inset 0 0 0 1px rgba(90,200,250,0.38);
+}
+.pt-text{min-width:0;}
+.pt-title{font-size:17px;font-weight:600;letter-spacing:0.01em;}
+.pt-sub{font-size:11.5px;opacity:0.62;margin-top:5px;}
+.pt-card .xbtn{position:absolute;top:9px;right:9px;}
+
+/* widget content grows with the card when resized */
+.w-body{zoom:var(--ws,1);}
+#datetime .w-body,
+#weather .w-body,
+#greeting-wrap .w-body,
+#quote .w-body{
+  display:flex;flex-direction:column;justify-content:center;height:100%;
+}
+#searchbar .w-body{height:100%;}
+#shortcuts .w-body{min-height:100%;align-content:center;}
+#q-text{padding-right:22px;}
+
+/* quote refresh button */
+.quote-refresh{
+  position:absolute;top:8px;right:8px;
+  width:26px;height:26px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,0.12);
+  border:1px solid rgba(255,255,255,0.22);
+  color:rgba(255,255,255,0.78);
+  cursor:pointer;z-index:4;
+  opacity:0;
+  transition:opacity 0.2s ease,background 0.2s ease,scale 0.2s ease;
+}
+#quote:hover .quote-refresh,#quote:focus-within .quote-refresh{opacity:1;}
+.quote-refresh:hover{background:rgba(255,255,255,0.24);color:#fff;scale:1.06;}
+.quote-refresh:active{scale:0.94;}
+@media (hover:none){.quote-refresh{opacity:0.85;}}
+
+/* weather refresh button */
+#weather:hover .weather-refresh,#weather:focus-within .weather-refresh{opacity:1;}
+#weather .w-city{padding:0 20px;}
+.weather-refresh svg{transform-origin:center;}
+.weather-refresh.spinning svg{animation:w-spin 0.9s linear infinite;}
+@keyframes w-spin{to{transform:rotate(360deg);}}
+
+/* per-widget reset (layout mode) */
+.reset-knob{
+  position:absolute;top:-10px;right:-10px;
+  width:18px;height:18px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,0.16);
+  border:1px solid rgba(255,255,255,0.45);
+  color:#fff;font-size:11px;line-height:1;
+  cursor:pointer;z-index:4;
+  opacity:0;pointer-events:none;
+  transition:opacity 0.2s ease,background 0.2s ease,scale 0.2s ease;
+}
+body.layout-editing .draggable:hover .reset-knob{opacity:1;pointer-events:auto;}
+.reset-knob:hover{background:rgba(90,200,250,0.55);scale:1.1;}
+
+/* tiny inline button used by the layout panel */
+.mini-btn{
+  padding:3px 9px;border-radius:8px;
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.16);
+  color:rgba(255,255,255,0.7);
+  font-size:10px;cursor:pointer;font-family:inherit;
+  transition:background 0.18s,color 0.18s;
+}
+.mini-btn:hover{background:rgba(255,255,255,0.16);color:#fff;}
+
+/* one row per widget in the layout section */
+.reset-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:8px;padding:5px 0;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.reset-row span{font-size:11.5px;color:rgba(255,255,255,0.66);}
+
+/* one block per widget: reset row + Left/Top sliders */
+.pos-block{margin-bottom:12px;}
+.pos-block .pos-row{margin-top:6px;margin-bottom:0;}
+
+/* textarea variant of .fi */
+textarea.fi{
+  resize:vertical;min-height:72px;line-height:1.5;
+  padding:10px 12px;
+}
+
+/* ── glass presets ── */
+.preset-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.preset{
+  padding:9px 4px;border-radius:10px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.12);
+  color:rgba(255,255,255,0.72);
+  font-size:11px;cursor:pointer;font-family:inherit;
+  transition:background 0.18s,color 0.18s,border-color 0.18s;
+}
+.preset:hover{background:rgba(255,255,255,0.14);color:#fff;}
+.preset.on{
+  background:rgba(90,200,250,0.20);
+  border-color:rgba(90,200,250,0.50);
+  color:#fff;
+}
+
+/* ── small section heading inside panes ── */
+.sect{
+  font-size:12px;font-weight:600;
+  color:rgba(255,255,255,0.8);
+  margin:2px 0;
+}
+
+/* ── credits / info pane ── */
+.badge{
+  display:inline-block;padding:2px 8px;border-radius:20px;
+  background:rgba(90,200,250,0.18);
+  border:1px solid rgba(90,200,250,0.40);
+  color:#9fe0ff;font-size:10px;font-weight:500;
+  vertical-align:middle;margin-left:4px;
+  transition:background 0.2s ease,border-color 0.2s ease,scale 0.2s ease;
+}
+.badge:hover{background:rgba(90,200,250,0.32);border-color:rgba(90,200,250,0.65);scale:1.05;}
+
+/* ── changelog window ── */
+.changelog-modal{
+  position:fixed;inset:0;z-index:400;
+  display:none;align-items:center;justify-content:center;
+  padding:24px;background:rgba(0,0,0,0.5);
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+  opacity:0;transition:opacity 0.24s ease;pointer-events:none;
+}
+.changelog-modal.open{display:flex;pointer-events:auto;opacity:1;}
+.changelog-panel{
+  width:min(720px,92vw);max-height:80vh;
+  display:flex;flex-direction:column;
+  padding:20px 22px 4px;border-radius:24px;
+  color:var(--fg);
+}
+.changelog-head{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+  padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.10);
+}
+.changelog-title{font-size:17px;font-weight:600;letter-spacing:0.02em;}
+.changelog-body{
+  overflow-y:auto;min-height:0;padding:14px 2px 18px;
+  font-size:12px;line-height:1.55;
+}
+.changelog-body h2{font-size:15px;margin:16px 0 6px;color:var(--fg);}
+.changelog-body h3{font-size:13.5px;margin:16px 0 6px;color:var(--fg);}
+.changelog-body h4{font-size:11px;margin:12px 0 4px;opacity:0.75;letter-spacing:0.05em;text-transform:uppercase;}
+.changelog-body ul{margin:4px 0 10px;padding-left:18px;}
+.changelog-body li{margin:4px 0;}
+.changelog-body p{margin:6px 0;opacity:0.8;}
+.changelog-body code{background:rgba(255,255,255,0.10);padding:1px 5px;border-radius:5px;font-size:11px;}
+.changelog-body .clog-loading{opacity:0.6;}
+
+/* ── prayer times window ── */
+.prayer-modal{
+  position:fixed;inset:0;z-index:900;
+  display:none;align-items:center;justify-content:center;
+  padding:24px;background:rgba(0,0,0,0.5);
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+  opacity:0;transition:opacity 0.28s ease;pointer-events:none;
+}
+.prayer-modal.open{display:flex;pointer-events:auto;}
+.prayer-modal.in{opacity:1;}
+.prayer-panel{
+  width:min(340px,92vw);max-height:82vh;overflow-y:auto;
+  padding:18px 18px 16px;border-radius:22px;color:var(--fg);
+  transform:scale(0.94) translateY(12px);opacity:0;
+  transition:transform 0.32s cubic-bezier(0.34,1.30,0.64,1),opacity 0.28s ease;
+}
+.prayer-modal.in .prayer-panel{transform:none;opacity:1;}
+.prayer-city{font-size:10px;letter-spacing:0.10em;text-transform:uppercase;opacity:0.5;margin-top:2px;}
+.prayer-loc-note{font-size:9.5px;opacity:0.4;margin-top:4px;line-height:1.45;font-weight:400;}
+.prayer-next{padding:12px 0 10px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.10);}
+.prayer-next-label{font-size:9px;letter-spacing:0.16em;text-transform:uppercase;opacity:0.45;}
+.prayer-next-name{font-size:20px;font-weight:600;margin-top:4px;letter-spacing:0.01em;}
+.prayer-next-time{font-size:13px;opacity:0.8;margin-top:2px;}
+.prayer-count{font-size:10.5px;opacity:0.55;margin-top:3px;letter-spacing:0.04em;}
+.prayer-list{padding:8px 0 4px;}
+.prayer-row{display:flex;justify-content:space-between;padding:7px 8px;font-size:12px;border-radius:9px;}
+.prayer-row.next{background:rgba(90,200,250,0.16);box-shadow:inset 0 0 0 1px rgba(90,200,250,0.35);}
+.prayer-name{opacity:0.7;}
+.prayer-time{font-variant-numeric:tabular-nums;}
+.prayer-row.next .prayer-name,.prayer-row.next .prayer-time{opacity:1;font-weight:600;}
+.prayer-note{font-size:9.5px;opacity:0.4;text-align:center;padding-top:8px;line-height:1.5;}
+.credit{
+  display:flex;justify-content:space-between;gap:12px;
+  padding:7px 0;font-size:12px;
+  border-bottom:1px solid rgba(255,255,255,0.07);
+}
+.credit span:first-child{color:rgba(255,255,255,0.55);}
+.credit span:last-child{color:#fff;text-align:right;}
+.credit a{
+  color:#9fe0ff;text-decoration:none;text-align:right;
+  border-bottom:1px solid rgba(159,224,255,0.35);
+  transition:color 0.18s,border-color 0.18s;
+}
+.credit a:hover{color:#fff;border-color:#fff;}
+.glory{
+  text-align:center;padding:14px 0 4px;
+  font-size:11.5px;letter-spacing:0.10em;text-transform:uppercase;
+  color:rgba(255,255,255,0.60);
+}
+code{
+  font-family:'Roboto Mono',monospace;font-size:10.5px;
+  background:rgba(255,255,255,0.10);
+  padding:1px 5px;border-radius:5px;
+}
+
+/* ── Apple-style hover lift (translate/scale props so saved inline
+      `transform:none` from drag positions doesn't cancel it) ── */
+#datetime,#calendar,#prayer,#greeting-wrap,#weather,#quote,#shortcuts,.search-wrap{
+  transition:translate 0.26s cubic-bezier(0.22,0.61,0.36,1),
+             scale 0.26s cubic-bezier(0.22,0.61,0.36,1),
+             border-color 0.26s ease,
+             box-shadow 0.26s ease,
+             opacity 0.22s ease,
+             filter 0.22s ease;
+}
+@media (hover:hover) and (pointer:fine){
+  body:not(.layout-editing) #datetime:hover,
+  body:not(.layout-editing) #calendar:hover,
+  body:not(.layout-editing) #prayer:hover,
+  body:not(.layout-editing) #greeting-wrap:hover,
+  body:not(.layout-editing) #weather:hover,
+  body:not(.layout-editing) #quote:hover,
+  body:not(.layout-editing) #shortcuts:hover,
+  body:not(.layout-editing) .search-wrap:hover,
+  body:not(.layout-editing) #status-tile:hover{
+    translate:0 -2px;
+    scale:1.008;
+    border-color:rgba(255,255,255,0.40);
+    /* the same soft outer glow the status / layout / gear buttons use */
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.34),
+      inset 0 -1px 0 rgba(255,255,255,0.06),
+      0 10px 26px rgba(0,0,0,0.34),
+      0 0 0 1px rgba(255,255,255,0.05),
+      0 0 22px rgba(255,255,255,0.12);
+  }
+}
+
+/* icon buttons: gentle macOS press */
+#gear-btn,#layout-btn{
+  transition:background 0.22s ease,border-color 0.22s ease,
+             box-shadow 0.22s ease,translate 0.22s ease,
+             scale 0.22s cubic-bezier(0.22,0.61,0.36,1);
+}
+@media (hover:hover) and (pointer:fine){
+  #gear-btn:hover,#layout-btn:hover{
+    background:rgba(255,255,255,0.20);
+    border-color:rgba(255,255,255,0.36);
+    translate:0 -2px;
+    scale:1.035;
+    /* match the widget halo exactly, so the buttons stop glowing differently */
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.34),
+      inset 0 -1px 0 rgba(255,255,255,0.06),
+      0 10px 26px rgba(0,0,0,0.34),
+      0 0 0 1px rgba(255,255,255,0.05),
+      0 0 22px rgba(255,255,255,0.12);
+  }
+}
+#gear-btn:active,#layout-btn:active{scale:0.965;}
+
+/* resize knob: just the interactive bits, size lives in the base rule */
+.resize-knob{
+  touch-action:none;
+  box-shadow:0 2px 8px rgba(0,0,0,0.35);
+  transition:opacity 0.2s ease,scale 0.18s ease,box-shadow 0.18s ease;
+}
+@media (hover:hover) and (pointer:fine){
+  .resize-knob:hover{
+    scale:1.28;
+    box-shadow:0 0 0 4px rgba(90,200,250,0.18),0 3px 12px rgba(0,0,0,0.42);
+  }
+}
+
+/* ── accessibility ── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:0.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:0.001ms!important;
+  }
+}
+/* ── global text colour (readability on bright wallpapers) ── */
+:root{
+  --fg:#ffffff;
+  /* panel text keeps a light floor so a dark colour stays readable on glass */
+  --fg-ui:color-mix(in srgb,var(--fg) 45%,#ffffff);
+  --fg-accent:color-mix(in srgb,var(--fg) 40%,#5ac8fa);
+}
+#time,#date,#greeting-text,#q-text,#q-author,
+#w-city,#w-temp,#w-deg,#w-unit,#w-desc,#w-rain,#w-updated,#w-raintime,
+.shortcut .sc-letter,.search-wrap input{color:var(--fg);}
+#w-city{color:color-mix(in srgb,var(--fg) 65%,transparent);}
+#w-raintime{color:color-mix(in srgb,var(--fg) 55%,transparent);}
+#w-updated{color:color-mix(in srgb,var(--fg) 45%,transparent);}
+.search-wrap input::placeholder{color:color-mix(in srgb,var(--fg) 50%,transparent);}
+input[type=color]{
+  width:42px;height:30px;padding:0;border-radius:8px;cursor:pointer;
+  background:transparent;border:1px solid rgba(255,255,255,0.25);
+}
+
+/* widget chrome follows the same colour, so nothing looks left behind */
+.search-wrap button svg{fill:color-mix(in srgb,var(--fg) 65%,transparent);}
+.search-wrap button:hover svg{fill:var(--fg);}
+.quote-refresh{color:color-mix(in srgb,var(--fg) 78%,transparent);}
+/* Shortcut tiles keep the plain glass look they always had. Tinting them with
+   the text colour (and a drop-shadow on the icons) gave them a glow that did
+   not match any other card, so the tint is gone. Only the letter fallback
+   still follows the chosen text colour, further down. */
+.resize-knob{
+  background:var(--fg-accent);
+  border-color:color-mix(in srgb,var(--fg) 55%,#ffffff);
+}
+.reset-knob{color:var(--fg);}
+
+/* settings panel: tinted, but with a readability floor */
+.tbtn{color:color-mix(in srgb,var(--fg-ui) 55%,transparent);}
+.tbtn:hover{color:color-mix(in srgb,var(--fg-ui) 85%,transparent);}
+.tbtn.on{color:var(--fg-ui);}
+.lbl{color:color-mix(in srgb,var(--fg-ui) 60%,transparent);}
+.sect{color:color-mix(in srgb,var(--fg-ui) 80%,transparent);}
+.hint,.toggle-row .hint{color:color-mix(in srgb,var(--fg-ui) 40%,transparent);}
+.fi{color:var(--fg-ui);}
+.rich-trig{color:var(--fg-ui);}
+.rich-item{color:var(--fg-ui);}
+.fi::placeholder{color:color-mix(in srgb,var(--fg-ui) 38%,transparent);}
+.fi option{background:#1e1e2e;color:var(--fg-ui);}
+.preset{color:color-mix(in srgb,var(--fg-ui) 72%,transparent);}
+.preset:hover,.preset.on{color:var(--fg-ui);}
+.mini-btn{color:color-mix(in srgb,var(--fg-ui) 70%,transparent);}
+.mini-btn:hover{color:var(--fg-ui);}
+.reset-row span{color:color-mix(in srgb,var(--fg-ui) 66%,transparent);}
+.pos-row label{color:color-mix(in srgb,var(--fg-ui) 60%,transparent);}
+.pos-row span{color:color-mix(in srgb,var(--fg-ui) 70%,transparent);}
+.toggle-row label{color:color-mix(in srgb,var(--fg-ui) 85%,transparent);}
+.wgroup-label{color:color-mix(in srgb,var(--fg-ui) 42%,transparent);}
+.wrow-name{color:color-mix(in srgb,var(--fg-ui) 88%,transparent);}
+.wrow-desc{color:color-mix(in srgb,var(--fg-ui) 42%,transparent);}
+.wrow-ico{color:color-mix(in srgb,var(--fg-ui) 78%,transparent);}
+.wsub-row label{color:color-mix(in srgb,var(--fg-ui) 72%,transparent);}
+.sadd{color:color-mix(in srgb,var(--fg-ui) 45%,transparent);}
+.sadd:hover{color:var(--fg-ui);}
+.sbtn,.rbtn{color:var(--fg-ui);}
+.browser-card{color:color-mix(in srgb,var(--fg-ui) 60%,transparent);}
+.browser-card.selected{color:var(--fg-ui);}
+.font-card .fname,.clock-card .cname{color:color-mix(in srgb,var(--fg-ui) 55%,transparent);}
+.font-card .fprev,.clock-card .cprev{color:var(--fg-ui);}
+#vdrop,#vstatus{color:color-mix(in srgb,var(--fg-ui) 50%,transparent);}
+.credit span:first-child{color:color-mix(in srgb,var(--fg-ui) 55%,transparent);}
+.credit span:last-child{color:var(--fg-ui);}
+.credit a{color:color-mix(in srgb,var(--fg-ui) 55%,#9fe0ff);}
+.credit a:hover{color:var(--fg-ui);}
+.glory{color:color-mix(in srgb,var(--fg-ui) 60%,transparent);}
+
+@media (prefers-reduced-transparency: reduce){
+  .glass,#gear-btn,#layout-btn{
+    background:rgba(16,16,22,0.84)!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+  }
+}
+
+/* ══════════════════════════════════════════
+   Newly — interactive windows, menus & extras
+══════════════════════════════════════════ */
+
+/* no text selection anywhere (a stray selection used to fight the sliders) */
+body{-webkit-user-select:none;user-select:none;}
+input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:text;}
+
+/* quote refresh spins just like the weather one */
+.quote-refresh svg{transform-origin:center;}
+.quote-refresh.spinning svg{animation:w-spin 0.9s linear infinite;}
+#quote-copy{right:40px;}
+
+/* generic centred window */
+.win-modal{
+  position:fixed;inset:0;z-index:820;
+  display:none;align-items:center;justify-content:center;
+  padding:24px;background:rgba(0,0,0,0.5);
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+  opacity:0;transition:opacity 0.28s ease;pointer-events:none;
+}
+.win-modal.open{display:flex;pointer-events:auto;}
+.win-modal.in{opacity:1;}
+.win-panel{
+  width:min(360px,92vw);max-height:84vh;overflow-y:auto;
+  padding:18px 18px 16px;border-radius:22px;color:var(--fg);
+  transform:scale(0.94) translateY(12px);opacity:0;
+  transition:transform 0.32s cubic-bezier(0.34,1.30,0.64,1),opacity 0.28s ease;
+}
+.win-modal.in .win-panel{transform:none;opacity:1;}
+.win-panel.win-wide{width:min(430px,94vw);}
+.win-sub{font-size:10px;letter-spacing:0.08em;opacity:0.5;margin-top:2px;text-transform:uppercase;}
+
+/* first-run welcome: three quiet steps, never a wizard */
+.ob-panel{width:min(390px,92vw);}
+.ob-head{display:flex;align-items:center;gap:12px;padding-bottom:14px;}
+.ob-mark{
+  width:38px;height:38px;border-radius:13px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;line-height:1;
+  background:rgba(255,255,255,0.13);
+  border:1px solid rgba(255,255,255,0.16);
+  color:rgba(255,255,255,0.9);
+}
+.ob-title{font-size:15px;font-weight:600;letter-spacing:-0.01em;color:var(--fg);}
+.ob-sub{
+  font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;
+  opacity:0.42;margin-top:3px;
+}
+.ob-steps{min-height:200px;display:flex;flex-direction:column;justify-content:center;}
+.ob-step{display:flex;flex-direction:column;gap:9px;}
+.ob-step[hidden]{display:none;}
+.ob-step:not([hidden]){animation:obIn 0.26s ease;}
+@keyframes obIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+.ob-lead{font-size:15px;line-height:1.45;font-weight:500;color:var(--fg);margin:0;}
+.ob-body{font-size:12px;line-height:1.6;opacity:0.6;margin:0;}
+.ob-preview{
+  margin:2px 0 0;padding:9px 12px;border-radius:12px;min-height:36px;
+  font-size:13px;color:var(--fg);
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.09);
+}
+.ob-swatches{display:flex;gap:8px;flex-wrap:wrap;}
+.ob-swatch{
+  width:34px;height:34px;border-radius:11px;cursor:pointer;
+  border:2px solid transparent;
+  transition:transform 0.15s,border-color 0.15s;
+}
+.ob-swatch:hover{transform:scale(1.07);}
+.ob-swatch.on{border-color:rgba(255,255,255,0.85);}
+.ob-cats{display:flex;flex-wrap:wrap;gap:6px;}
+.ob-cat{
+  padding:7px 11px;border-radius:999px;font-size:11.5px;cursor:pointer;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.14);
+  color:rgba(255,255,255,0.82);font-family:inherit;
+  transition:background 0.16s,border-color 0.16s,color 0.16s;
+}
+.ob-cat:hover{background:rgba(255,255,255,0.13);}
+.ob-cat.on{background:rgba(90,200,250,0.22);border-color:rgba(90,200,250,0.5);color:#fff;}
+.ob-glass-pane{
+  padding:10px 12px;border-radius:14px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.09);
+}
+.ob-drop{
+  border:2px dashed rgba(255,255,255,0.22);border-radius:14px;
+  padding:20px 14px;text-align:center;cursor:pointer;
+  color:rgba(255,255,255,0.55);font-size:12.5px;
+  transition:background 0.18s;
+}
+.ob-drop:hover{background:rgba(255,255,255,0.06);}
+.ob-drop.dg{background:rgba(90,200,250,0.10);border-color:#5ac8fa;}
+.ob-vstatus{font-size:11px;color:rgba(255,255,255,0.55);text-align:center;min-height:14px;}
+.ob-vstatus.ok{color:#5ac8fa;}
+.ob-dots{display:flex;gap:6px;justify-content:center;padding:14px 0 12px;}
+.ob-dots span{
+  width:6px;height:6px;border-radius:50%;
+  background:rgba(255,255,255,0.22);
+  transition:background 0.28s ease,transform 0.28s ease;
+}
+.ob-dots span.on{background:rgba(255,255,255,0.85);transform:scale(1.25);}
+.ob-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+
+/* peek: while a window's own slider is dragged, fade the window and its
+   dimmer so the live widget behind it is visible */
+.win-modal.peek{background:rgba(0,0,0,0.04);-webkit-backdrop-filter:none;backdrop-filter:none;transition:background 0.12s ease;}
+.win-modal.in.peek .win-panel{
+  opacity:0.10;
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+  box-shadow:none;
+  transition:opacity 0.12s ease;
+}
+
+/* quote window: the voice on screen now + descriptive source cards */
+.qw-now{
+  margin-top:12px;padding:12px 14px;border-radius:14px;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.10);
+}
+.qw-now-label{
+  font-size:8.5px;letter-spacing:0.16em;text-transform:uppercase;
+  opacity:0.42;margin-bottom:6px;
+}
+.qw-now-text{font-size:12.5px;line-height:1.5;color:var(--fg);}
+.qw-now-author{font-size:10.5px;opacity:0.55;margin-top:7px;text-align:right;}
+.qw-cats{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+.qw-cat{
+  display:flex;align-items:flex-start;gap:10px;width:100%;
+  padding:10px 12px;border-radius:12px;text-align:left;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.10);
+  color:var(--fg);font-family:inherit;cursor:pointer;
+  transition:background 0.18s ease,border-color 0.18s ease,transform 0.18s ease;
+}
+.qw-cat:hover{background:rgba(255,255,255,0.11);border-color:rgba(255,255,255,0.22);transform:translateY(-1px);}
+.qw-cat.on{background:rgba(90,200,250,0.18);border-color:rgba(90,200,250,0.45);}
+.qw-cat-ico{font-size:16px;line-height:1.15;width:20px;text-align:center;flex-shrink:0;}
+.qw-cat-body{min-width:0;display:block;}
+.qw-cat-name{display:block;font-size:12px;font-weight:600;letter-spacing:0.01em;}
+.qw-cat-desc{display:block;font-size:10px;opacity:0.55;line-height:1.45;margin-top:2px;}
+
+/* live greeting preview: the same words, weight and colour as the card */
+.greet-preview{
+  margin-top:12px;padding:14px 16px;border-radius:14px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.10);
+  text-align:center;overflow:hidden;
+}
+.greet-preview-label{
+  font-size:8.5px;letter-spacing:0.16em;text-transform:uppercase;
+  opacity:0.42;margin-bottom:7px;
+}
+.greet-preview-text{
+  line-height:1.25;word-break:break-word;
+  transition:color 0.2s ease,font-size 0.18s ease,opacity 0.2s ease;
+}
+/* the quote window's refresh choice sits with the source cards */
+#qw-every{margin-top:2px;}
+/* …and anyone can type their own number of seconds, kept in step with the
+   presets and with the same field in Settings */
+.qw-own-row{
+  display:grid;grid-template-columns:1fr 86px auto;
+  gap:8px;align-items:center;margin-top:8px;
+}
+.qw-own-row > span{
+  font-size:11px;color:color-mix(in srgb,var(--fg) 55%,transparent);
+}
+.qw-own-row input.fi{padding:8px 10px;font-size:12px;}
+.qw-own-unit{font-size:11px;opacity:0.45;}
+
+/* small floating menu inside a widget */
+.mini-menu{
+  position:absolute;z-index:30;min-width:172px;padding:6px;border-radius:14px;
+  display:none;flex-direction:column;gap:2px;color:var(--fg);
+}
+.mini-menu.open{display:flex;animation:menu-in 0.22s cubic-bezier(0.34,1.3,0.64,1);}
+@keyframes menu-in{from{opacity:0;transform:translateY(-6px) scale(0.96);}to{opacity:1;transform:none;}}
+.mini-item{
+  display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;
+  font-size:12px;cursor:pointer;color:var(--fg);background:transparent;
+  border:none;font-family:inherit;text-align:left;width:100%;transition:background 0.15s;
+}
+.mini-item:hover{background:rgba(255,255,255,0.14);}
+.mini-item.on{background:rgba(90,200,250,0.20);}
+.mini-item img{width:18px;height:18px;border-radius:5px;flex-shrink:0;}
+.mini-item .mi-hint{margin-left:auto;font-size:10px;opacity:0.45;}
+/* the bar lives near the bottom of the page, so the menu opens upward where
+   it can actually be seen and clicked; it also gets its own spring */
+#engine-menu{
+  top:auto;bottom:calc(100% + 8px);left:0;
+  max-height:min(60vh,320px);overflow-y:auto;
+  transform-origin:bottom center;
+}
+#engine-menu.open{animation:menu-up 0.22s cubic-bezier(0.34,1.3,0.64,1);}
+@keyframes menu-up{
+  from{opacity:0;transform:translateY(6px) scale(0.97);}
+  to{opacity:1;transform:none;}
+}
+/* and it leaves the same way — a soft drop toward the bar, never a snap */
+#engine-menu.closing{
+  display:flex;pointer-events:none;
+  animation:menu-down 0.18s cubic-bezier(0.4,0,0.6,1) forwards;
+}
+@keyframes menu-down{
+  from{opacity:1;transform:none;}
+  to{opacity:0;transform:translateY(6px) scale(0.97);}
+}
+
+/* the search bar glides to the middle and dims the page while you type */
+#search-dim{
+  position:fixed;inset:0;z-index:140;
+  background:rgba(0,0,0,0.34);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity 0.28s ease;
+}
+body.search-active #search-dim{opacity:1;pointer-events:auto;}
+#searchbar{transition:left 0.34s cubic-bezier(0.22,0.61,0.36,1),top 0.34s cubic-bezier(0.22,0.61,0.36,1),transform 0.34s cubic-bezier(0.22,0.61,0.36,1);}
+#searchbar.search-focus{
+  left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;
+  transform:translate(-50%,-50%) scale(1.12)!important;z-index:150;
+}
+#searchbar.search-focus .search-wrap{box-shadow:0 14px 40px rgba(0,0,0,0.45),0 0 0 1px rgba(255,255,255,0.16);}
+
+/* weather window */
+.ww-now{display:flex;align-items:center;gap:12px;padding:10px 0 12px;border-bottom:1px solid rgba(255,255,255,0.10);}
+.ww-now-ico{font-size:34px;line-height:1;}
+.ww-now-temp{font-size:26px;font-weight:600;}
+.ww-now-desc{font-size:11px;opacity:0.7;margin-top:2px;}
+.ww-segs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:12px 0;}
+.ww-seg{padding:9px 4px;border-radius:12px;text-align:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);}
+.ww-seg .ws-lbl{font-size:8.5px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.5;}
+.ww-seg .ws-ico{font-size:19px;margin:4px 0 2px;line-height:1;}
+.ww-seg .ws-temp{font-size:13px;font-weight:600;}
+.ww-seg .ws-rain{font-size:8.5px;opacity:0.55;margin-top:2px;min-height:11px;}
+.ww-note{font-size:10px;line-height:1.5;opacity:0.45;font-style:italic;padding:2px 0 10px;}
+/* a quiet, honest line while the forecast is being fetched */
+.ww-status{font-size:10.5px;letter-spacing:0.02em;opacity:0.62;padding:8px 0 0;margin:0;}
+.ww-status:empty{display:none;}
+.ww-field{margin-bottom:10px;}
+.ww-link{display:inline-block;font-size:11px;color:#9fe0ff;text-decoration:none;border-bottom:1px solid rgba(159,224,255,0.35);}
+.ww-link:hover{color:#fff;border-color:#fff;}
+
+/* segmented control */
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;padding:4px;border-radius:12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.10);}
+.seg-btn{padding:7px 8px;border-radius:9px;background:transparent;border:none;color:color-mix(in srgb,var(--fg) 60%,transparent);font-size:11px;font-family:inherit;cursor:pointer;transition:background 0.18s,color 0.18s;}
+.seg-btn:hover{color:var(--fg);}
+.seg-btn.on{background:rgba(90,200,250,0.22);color:var(--fg);}
+
+/* calendar window */
+.calwin-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 6px;}
+.calwin-month{font-size:14px;font-weight:600;letter-spacing:0.02em;}
+.calwin-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;padding-bottom:8px;}
+.calwin-grid .cal-day{font-size:12px;min-height:30px;border-radius:9px;}
+.calwin-grid .cal-dow{font-size:9px;padding-bottom:4px;}
+.calwin-grid .cal-day.today{background:rgba(90,200,250,0.30);box-shadow:inset 0 0 0 1px rgba(90,200,250,0.55);color:#fff;font-weight:600;}
+@keyframes calin-spring{from{opacity:0;transform:translateY(10px) scale(0.97);}to{opacity:1;transform:none;}}
+@keyframes calin-fade{from{opacity:0;}to{opacity:1;}}
+@keyframes calin-slide{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:none;}}
+@keyframes calin-zoom{from{opacity:0;transform:scale(0.9);}to{opacity:1;transform:none;}}
+@keyframes calin-blur{from{opacity:0;filter:blur(8px);}to{opacity:1;filter:blur(0);}}
+@keyframes calin-drift{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+@keyframes calin-glide{from{opacity:0;transform:translateX(-16px);}to{opacity:1;transform:none;}}
+@keyframes calin-unfold{from{opacity:0;transform:perspective(700px) rotateX(-9deg);}to{opacity:1;transform:none;}}
+#calwin-grid.cal-anim{animation:calin-spring 0.34s cubic-bezier(0.34,1.3,0.64,1);}
+#calwin-grid.cal-anim.cal-fade{animation:calin-fade 0.3s ease;}
+#calwin-grid.cal-anim.cal-slide{animation:calin-slide 0.32s cubic-bezier(0.25,1,0.5,1);}
+#calwin-grid.cal-anim.cal-zoom{animation:calin-zoom 0.3s cubic-bezier(0.34,1.2,0.64,1);}
+#calwin-grid.cal-anim.cal-blur{animation:calin-blur 0.32s ease;}
+#calwin-grid.cal-anim.cal-drift{animation:calin-drift 0.36s cubic-bezier(0.22,0.61,0.36,1);}
+#calwin-grid.cal-anim.cal-glide{animation:calin-glide 0.34s cubic-bezier(0.25,1,0.5,1);}
+#calwin-grid.cal-anim.cal-unfold{animation:calin-unfold 0.34s cubic-bezier(0.22,0.61,0.36,1);}
+#calwin-grid.cal-anim.cal-none{animation:none;}
+
+/* status popover closing animation */
+.status-pop.closing{animation:sp-out 0.2s ease forwards;}
+@keyframes sp-out{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(8px) scale(0.98);}}
+
+/* small aesthetic confirmation toast */
+#note-toast{
+  position:fixed;left:50%;top:22px;transform:translateX(-50%) translateY(-8px);
+  z-index:1000;padding:8px 16px;border-radius:999px;
+  font-size:11.5px;letter-spacing:0.03em;color:#fff;
+  background:rgba(20,20,24,0.62);
+  border:1px solid rgba(255,255,255,0.22);
+  box-shadow:0 8px 26px rgba(0,0,0,0.4);
+  -webkit-backdrop-filter:blur(14px) saturate(1.4);backdrop-filter:blur(14px) saturate(1.4);
+  opacity:0;pointer-events:none;
+  transition:opacity 0.2s ease,transform 0.2s ease;
+}
+#note-toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+/* a plain, instant variant for the layout-mode nudge (no fade, no blur) */
+#note-toast.plain{
+  transition:none;
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+  background:rgba(20,20,24,0.86);
+}
+/* a missed click gets a small, gentle shake so it reads as feedback */
+#note-toast.shake{animation:toast-shake 0.42s cubic-bezier(0.36,0.07,0.19,0.97);}
+@keyframes toast-shake{
+  0%,100%{transform:translateX(-50%) translateY(0);}
+  20%{transform:translateX(calc(-50% - 4px)) translateY(0);}
+  40%{transform:translateX(calc(-50% + 4px)) translateY(0);}
+  60%{transform:translateX(calc(-50% - 3px)) translateY(0);}
+  80%{transform:translateX(calc(-50% + 3px)) translateY(0);}
+}
+/* the "you missed a card" nudge sits at eye level, large enough to be seen
+   from across a room, and reads as a real message rather than a whisper */
+#note-toast.center{
+  top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(0.97);
+  padding:15px 26px;border-radius:18px;
+  max-width:min(74vw,440px);text-align:center;
+  font-size:14px;line-height:1.5;letter-spacing:0.01em;
+  background:rgba(20,20,24,0.90);
+  border-color:rgba(255,255,255,0.28);
+  box-shadow:0 18px 50px rgba(0,0,0,0.5);
+  transition:opacity 0.16s ease,transform 0.16s ease;
+}
+#note-toast.center.on{opacity:1;transform:translate(-50%,-50%) scale(1);}
+#note-toast.center.shake{animation:toast-shake-center 0.46s cubic-bezier(0.36,0.07,0.19,0.97);}
+@keyframes toast-shake-center{
+  0%,100%{transform:translate(-50%,-50%) scale(1);}
+  18%{transform:translate(calc(-50% - 5px),-50%) scale(1);}
+  36%{transform:translate(calc(-50% + 5px),-50%) scale(1);}
+  54%{transform:translate(calc(-50% - 4px),-50%) scale(1);}
+  72%{transform:translate(calc(-50% + 4px),-50%) scale(1);}
+  88%{transform:translate(calc(-50% - 2px),-50%) scale(1);}
+}
+
+/* tint colour picker row */
+.tint-custom{display:flex;align-items:center;gap:8px;margin-top:8px;}
+</style>
 </head>
 <body>
-    <!-- Background Video -->
-    <video id="background" autoplay loop muted>
-        <source src="hollow-knigth-and-hornet.1920x1080.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
 
-    <!-- Shortcuts -->
-    <div id="shortcuts">
-        <a href="https://www.google.com" class="shortcut" target="_blank">
-            <img src="https://www.google.com/favicon.ico" alt="Google">
-        </a>
-        <a href="https://www.youtube.com" class="shortcut" target="_blank">
-            <img src="https://blog.youtube/static/blog_youtube/images/youtube_social_200x200.png" alt="YouTube">
-        </a>
-        <a href="https://www.github.com" class="shortcut" target="_blank">
-            <img src="https://github.githubassets.com/favicons/favicon.png" alt="GitHub">
-        </a>
-        <a href="https://www.reddit.com" class="shortcut" target="_blank">
-            <img src="https://www.redditstatic.com/desktop2x/img/favicon/android-icon-192x192.png" alt="Reddit">
-        </a>
+<video id="background" autoplay loop muted playsinline disablepictureinpicture disableremoteplayback></video>
+<div id="fallback-bg" aria-hidden="true"></div>
+<div id="search-dim" aria-hidden="true"></div>
+
+<!-- shortcuts -->
+<div id="shortcuts" class="draggable glass" style="display: flex;gap: 10px;">
+  <div class="drag-handle"></div>
+</div>
+
+<!-- clock -->
+<div id="datetime" class="draggable glass">
+  <div class="drag-handle"></div>
+  <div class="w-body">
+    <div id="date">--</div>
+    <div id="time">--:--</div>
+  </div>
+</div>
+
+<!-- calendar -->
+<div id="calendar" class="draggable glass">
+  <div class="drag-handle"></div>
+  <div class="w-body">
+    <div class="cal-head"><span id="cal-month">—</span><span id="cal-year"></span></div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+</div>
+
+<!-- prayer times -->
+<div id="prayer" class="draggable glass">
+  <div class="drag-handle"></div>
+  <div class="w-body">
+    <div class="pw-head">
+      <span class="pw-lbl">Next prayer</span>
+      <span id="pw-city" title="Location from your weather city"></span>
+    </div>
+    <div class="pw-main">
+      <span id="pw-name">—</span>
+      <span id="pw-time"></span>
+    </div>
+    <div class="pw-count" id="pw-count"></div>
+  </div>
+</div>
+
+<!-- greeting -->
+<div id="greeting-wrap" class="draggable glass">
+  <div class="drag-handle"></div>
+  <div class="w-body"><div id="greeting-text"></div></div>
+</div>
+
+<!-- weather -->
+<div id="weather" class="draggable glass">
+  <div class="drag-handle"></div>
+  <button id="weather-refresh" class="quote-refresh weather-refresh" title="Update weather" aria-label="Update weather">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+    </svg>
+  </button>
+  <div class="w-body">
+    <div class="w-city" id="w-city">—</div>
+    <div class="w-main">
+      <span id="w-icon">·</span>
+      <span class="w-tempwrap"><span id="w-temp">--</span><span id="w-deg">°</span><span id="w-unit">C</span></span>
+    </div>
+    <div class="w-sub"><span id="w-desc">Weather</span><span id="w-rain"></span></div>
+    <div class="w-raintime" id="w-raintime"></div>
+    <div class="w-updated" id="w-updated"></div>
+  </div>
+</div>
+
+<!-- quote -->
+<div id="quote" class="draggable glass">
+  <div class="drag-handle"></div>
+  <button id="quote-refresh" class="quote-refresh" title="New quote" aria-label="New quote">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+    </svg>
+  </button>
+  <button id="quote-copy" class="quote-refresh" title="Copy quote" aria-label="Copy quote">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="11" height="11" rx="2.4"/><path d="M5 15V5.5A1.5 1.5 0 0 1 6.5 4H15"/>
+    </svg>
+  </button>
+  <div class="w-body">
+    <div id="q-text">Loading…</div>
+    <div id="q-author"></div>
+  </div>
+</div>
+
+<!-- search -->
+<div id="searchbar" class="draggable">
+  <div class="drag-handle"></div>
+  <div class="w-body">
+    <div class="search-wrap glass">
+    <img id="search-engine-icon" src="" alt="Search" title="Change search engine">
+    <input type="text" id="search-input" placeholder="Search anything, at your own pace…">
+    <button id="search-submit-btn" type="button">
+      <svg viewBox="0 0 24 24"><path d="M21 20l-5.6-5.6a7.5 7.5 0 10-1.4 1.4L20 21zM5 10.5a5.5 5.5 0 1111 0 5.5 5.5 0 01-11 0z"/></svg>
+    </button>
+    </div>
+  </div>
+  <div class="mini-menu glass" id="engine-menu" role="menu" aria-label="Search engine"></div>
+</div>
+
+<!-- device status -->
+<button id="status-tile" class="glass" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Device status" title="Device status">
+  <!-- battery markup kept for a future browser; BATTERY_UI = false in script.js -->
+  <span class="st-batt" hidden aria-hidden="true">
+    <span class="st-ico">
+      <svg viewBox="0 0 28 16" width="17" height="10">
+        <rect x="1.2" y="2.2" width="21" height="11.6" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.55"/>
+        <rect id="st-batt-fill" x="3.4" y="4.4" width="0" height="7.2" rx="1.6" fill="currentColor"/>
+        <rect x="24" y="6" width="2.2" height="4" rx="1" fill="currentColor" opacity="0.55"/>
+      </svg>
+    </span>
+    <span id="st-batt-text"></span>
+    <svg class="st-bolt" id="st-bolt" viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+      <path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/>
+    </svg>
+  </span>
+  <span class="st-sep" hidden aria-hidden="true"></span>
+  <span class="st-net">
+    <span id="st-dot" class="st-dot" aria-hidden="true"></span>
+    <span id="st-net-text">Online</span>
+  </span>
+</button>
+
+<div id="status-pop" class="status-pop glass" role="dialog" aria-label="Device status" aria-hidden="true">
+  <div class="sp-head">
+    <span class="sp-title">Device</span>
+    <button class="xbtn" id="status-pop-close" type="button" title="Close" aria-label="Close device status">✕</button>
+  </div>
+  <div class="sp-rows">
+    <!-- battery row kept for a future browser; BATTERY_UI = false in script.js -->
+    <div class="sp-row" id="sp-batt-row" hidden><span class="sp-k">Battery</span><span class="sp-v" id="sp-batt">—</span></div>
+    <div class="sp-row" id="sp-net-row"><span class="sp-k">Network</span><span class="sp-v" id="sp-net">—</span></div>
+    <div class="sp-row" id="sp-dev-row"><span class="sp-k">Device</span><span class="sp-v" id="sp-dev">—</span></div>
+    <div class="sp-row" id="sp-store-row"><span class="sp-k">Storage</span><span class="sp-v" id="sp-store">-</span></div>
+    <div class="sp-row"><span class="sp-k">Newly</span><span class="sp-v" id="sp-update">-</span></div>
+  </div>
+  <div class="sp-label">
+    <label class="lbl" for="sp-label-input">Network label</label>
+    <input class="fi" id="sp-label-input" type="text" maxlength="28" placeholder="e.g. Home Wi-Fi">
+  </div>
+  <div class="sp-foot">
+    <button class="mini-btn" id="sp-test" type="button" title="Ping Google (gstatic)">Test connection</button>
+    <button class="mini-btn" id="sp-update-check" type="button" title="Look for a newer release on GitHub">Check for updates</button>
+    <span id="sp-test-out"></span>
+  </div>
+</div>
+
+<!-- layout-edit toggle -->
+<button id="layout-btn" title="Toggle layout editing" aria-label="Toggle layout editing">
+  <svg width="20" height="20" fill="white" viewBox="0 0 24 24">
+    <path d="M3 3h7v7H3zm0 11h7v7H3zm11-11h7v7h-7zm0 11h7v7h-7z" opacity="0.3"/>
+    <path d="M4 4h5v5H4zm0 11h5v5H4zm11-11h5v5h-5zm0 11h5v5h-5z"/>
+    <circle cx="19" cy="19" r="3" fill="#5ac8fa"/>
+  </svg>
+</button>
+
+<!-- gear -->
+<button id="gear-btn" class="draggable" title="Customize" aria-label="Open settings">
+  <div class="drag-handle"></div>
+  <svg width="20" height="20" fill="white" viewBox="0 0 24 24">
+    <path d="M12 15.5A3.5 3.5 0 018.5 12 3.5 3.5 0 0112 8.5a3.5 3.5 0 013.5 3.5 3.5 3.5 0 01-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08s-.03-.74-.07-1.08l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 10.92c-.04.34-.07.67-.07 1.08s.03.74.07 1.08L2.46 14.71c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.63z"/>
+  </svg>
+</button>
+
+<!-- layout peek readout -->
+<div id="peek-hud"></div>
+
+<!-- settings overlay -->
+<div id="overlay">
+  <div id="panel" class="glass">
+    <div class="ph">
+      <h2>Customize</h2>
+      <button class="xbtn" id="xbtn">✕</button>
+    </div>
+    <div class="tabs">
+      <button class="tbtn on" data-t="greeting">Greeting</button>
+      <button class="tbtn" data-t="shortcuts">Shortcuts</button>
+      <button class="tbtn" data-t="clock">Clock</button>
+      <button class="tbtn" data-t="display">Display</button>
+      <button class="tbtn" data-t="widgets">Widgets</button>
+      <button class="tbtn" data-t="browser">Browser</button>
+      <button class="tbtn" data-t="video">Wallpaper</button>
+      <button class="tbtn" data-t="info">About</button>
+    </div>
+    <div class="pbody">
+
+      <!-- GREETING -->
+      <div class="pane on" id="pane-greeting">
+        <div>
+          <label class="lbl">Your name</label>
+          <input class="fi" id="iname" type="text" placeholder="e.g. Clovince">
+        </div>
+        <div>
+          <label class="lbl">Greeting style</label>
+          <select class="fi" id="istyle">
+            <option value="hi">Hi, {name}!</option>
+            <option value="hey">Hey, {name} 👋</option>
+            <option value="welcome">Welcome back, {name}!</option>
+            <option value="good">Good {time}, {name}!</option>
+            <option value="none">None (hide)</option>
+            <option value="custom">Custom text…</option>
+          </select>
+        </div>
+        <div id="custom-greeting-wrap" style="display:none">
+          <label class="lbl">Custom greeting text</label>
+          <input class="fi" id="icustomgreet" type="text" placeholder="Type anything…">
+          <p class="hint" style="margin-top:6px">Place {name} or {time} wherever it feels right — or leave them out.</p>
+        </div>
+
+        <div class="greet-preview" id="ig-preview">
+          <div class="greet-preview-label">Live preview</div>
+          <div class="greet-preview-text" id="ig-preview-text">Hi, friend!</div>
+        </div>
+
+        <div class="pdiv"></div>
+
+        <!-- § TEXT STYLE -->
+        <div style="font-size:12px;font-weight:600;color:var(--fg-ui);margin-bottom:2px;">Greeting text style</div>
+        <div class="row3">
+          <div>
+            <label class="lbl">Weight</label>
+            <select class="fi" id="igreetweight">
+              <option value="300">Light</option>
+              <option value="400">Regular</option>
+              <option value="600">Semi-bold</option>
+              <option value="700">Bold</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Style</label>
+            <select class="fi" id="igreetsyle">
+              <option value="normal">Normal</option>
+              <option value="italic">Italic</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Size</label>
+            <select class="fi" id="igreetsize">
+              <option value="16px">XS</option>
+              <option value="18px">S</option>
+              <option value="22px">M</option>
+              <option value="28px">L</option>
+              <option value="36px">XL</option>
+              <option value="48px">XXL</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="lbl">Greeting color</label>
+          <div class="swatch-grid" id="greet-color-swatches"></div>
+        </div>
+      </div>
+
+      <!-- SHORTCUTS -->
+      <div class="pane" id="pane-shortcuts">
+        <div id="sclist"></div>
+        <button class="sadd" id="scadd">+ Add shortcut</button>
+      </div>
+
+      <!-- CLOCK -->
+      <div class="pane" id="pane-clock">
+        <div>
+          <label class="lbl">Clock style</label>
+          <div class="clock-grid" id="clock-style-grid"></div>
+        </div>
+        <div class="row2">
+          <div>
+            <label class="lbl">Hour format</label>
+            <select class="fi" id="ihour">
+              <option value="12">12-hour (9:35 PM)</option>
+              <option value="24">24-hour (21:35)</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Show seconds</label>
+            <select class="fi" id="isecs">
+              <option value="0">No</option>
+              <option value="1">Yes</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="lbl">Date format</label>
+          <select class="fi" id="idatefmt">
+            <option value="long">Fri, June 26</option>
+            <option value="short">26/06/2026</option>
+            <option value="us">06/26/2026</option>
+            <option value="iso">2026-06-26</option>
+            <option value="none">Hide date</option>
+          </select>
+        </div>
+        <div>
+          <label class="lbl">Clock &amp; date size</label>
+          <div class="pos-row" style="margin-bottom:0">
+            <label>Size</label>
+            <input type="range" id="iclocktime" min="16" max="80" step="1" value="30">
+            <span id="iclocktime-v">30px</span>
+          </div>
+          <p class="hint">The date follows the clock. Each style keeps its own default until you decide otherwise.</p>
+        </div>
+        <div>
+          <label class="lbl">Calendar size</label>
+          <div class="pos-row" style="margin-bottom:0">
+            <label>Size</label>
+            <input type="range" id="icalsize" min="8" max="20" step="1" value="10">
+            <span id="icalsize-v">10px</span>
+          </div>
+          <p class="hint">Scales the whole calendar card — numbers, grid, and padding.</p>
+        </div>
+        <div>
+          <label class="lbl">Time source</label>
+          <select class="fi" id="itimesource">
+            <option value="device">This device's clock</option>
+            <option value="city">Follow the weather city</option>
+          </select>
+          <p class="hint">Default is your own device. "Weather city" uses the timezone Open-Meteo returns for that place.</p>
+        </div>
+      </div>
+
+      <!-- DISPLAY -->
+      <div class="pane" id="pane-display">
+
+        <!-- § FONT -->
+        <div style="font-size:12px;font-weight:600;color:var(--fg-ui);margin-bottom:2px;">Font</div>
+        <div class="font-grid" id="font-grid"></div>
+        <div id="custom-font-wrap" style="display:none">
+          <label class="lbl">Custom font (Google Fonts name or an installed font)</label>
+          <input class="fi" id="icustomfont" type="text" placeholder="e.g. Playfair Display">
+		  <p class="hint">Type any Google Fonts name, or a font already on your computer — Newly will check it for you.</p>
+		  <button class="sbtn" id="bsavefont">Apply font</button>
+		  <p class="font-status" id="font-status" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="pdiv"></div>
+
+        <div>
+          <label class="lbl">Text color (all widgets)</label>
+          <div class="swatch-grid" id="font-color-swatches"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+            <input type="color" id="ifontcolor" value="#ffffff">
+            <span class="hint">Or simply your own words.</span>
+          </div>
+        </div>
+
+        <div class="pdiv"></div>
+
+        <!-- § GLASS EFFECT -->
+        <div style="font-size:12px;font-weight:600;color:var(--fg-ui);margin-bottom:2px;">Glass &amp; Background</div>
+        <div>
+          <label class="lbl">Glass blur strength</label>
+          <div class="pos-row" style="margin-bottom:0">
+            <label>Blur</label>
+            <input type="range" id="iglassblur" min="0" max="80" value="30" style="width:100%;accent-color:#5ac8fa">
+            <span id="iglassblur-v">30px</span>
+          </div>
+        </div>
+        <div>
+          <label class="lbl">Glass opacity</label>
+          <div class="pos-row" style="margin-bottom:0">
+            <label>Alpha</label>
+            <input type="range" id="iglassalpha" min="0" max="40" value="10" style="width:100%;accent-color:#5ac8fa">
+            <span id="iglassalpha-v">10%</span>
+          </div>
+        </div>
+        <div>
+          <label class="lbl">Tint color</label>
+          <div class="swatch-grid" id="glass-tint-swatches"></div>
+          <div class="tint-custom">
+            <input type="color" id="iglasstint" value="#ffffff">
+            <span class="hint">Or pick your own tint.</span>
+          </div>
+        </div>
+        <div>
+          <label class="lbl">Quick presets</label>
+          <div class="preset-row" id="preset-row">
+            <button class="preset" data-preset="clear">Clear</button>
+            <button class="preset" data-preset="frosted">Frosted</button>
+            <button class="preset" data-preset="tinted">Tinted</button>
+            <button class="preset" data-preset="liquid">Liquid</button>
+          </div>
+        </div>
+
+        <div class="pdiv"></div>
+
+        <!-- § ANIMATION -->
+        <div style="font-size:12px;font-weight:600;color:var(--fg-ui);margin-bottom:2px;">UI Animation style</div>
+        <div class="anim-grid" id="anim-grid"></div>
+
+        <div class="pdiv"></div>
+
+        <!-- § PANEL SIZE -->
+        <div class="sect">Settings panel size</div>
+        <div class="preset-row" id="panel-size-row" style="grid-template-columns:repeat(3,1fr)">
+          <button class="preset" data-size="compact">Small</button>
+          <button class="preset" data-size="default">Default</button>
+          <button class="preset" data-size="large">Large</button>
+        </div>
+        <p class="hint">This only changes the settings window. Your widgets stay just as they are.</p>
+
+        <div class="pdiv"></div>
+
+        <!-- § SCREEN SCALING -->
+        <div class="sect">Screen scaling</div>
+        <p class="hint">Every screen is a little different. Choose what feels closest, or let “Fit this window” decide for you — it gently resets sizes, positions and clock size.</p>
+        <div>
+          <label class="lbl">Device preset</label>
+          <select class="fi" id="iscale">
+            <option value="sd">720p · small / old laptop (100%)</option>
+            <option value="hd">1080p · the usual (100%)</option>
+            <option value="qhd">2K / 1440p (125%)</option>
+            <option value="uhd">4K (150%)</option>
+          </select>
+        </div>
+        <div class="row2">
+          <button class="sbtn" id="bscaleapply">Apply preset</button>
+          <button class="sbtn" id="bscaleauto">Fit this window</button>
+        </div>
+        <p class="hint" style="margin-top:8px">A gentle warning: this rewrites every card's size and position. On some screens the result can look a little off — that's the preset settling in, not a break. Drag anything back, or reset the layout.</p>
+        <div id="scale-status" class="hint"></div>
+
+      </div>
+
+      <!-- BROWSER ICON -->
+      <div class="pane" id="pane-browser">
+        <p class="hint" style="margin-bottom:4px">Choose one, or bring your own.</p>
+        <div class="browser-grid" id="browser-grid"></div>
+        <div class="browser-custom-wrap">
+          <label class="lbl">Custom icon (URL or upload)</label>
+          <input class="fi" id="ibrowsercustomurl" type="text" placeholder="https://… (image URL)">
+          <div style="margin-top:6px;display:flex;gap:8px;align-items:center;">
+            <input type="file" id="ibrowsercustomfile" accept="image/*" style="display:none">
+            <button class="sbtn" id="ibrowsercustombtn" style="width:auto;padding:7px 14px;font-size:12px">Upload file</button>
+            <button class="sbtn" id="ibrowsercustomapply" style="width:auto;padding:7px 14px;font-size:12px">Apply URL</button>
+          </div>
+        </div>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Tab name</div>
+        <div>
+          <label class="lbl">Tab name style</label>
+          <select class="fi" id="itabnamestyle">
+            <option value="default">Default (Newly)</option>
+            <option value="greeting">Match greeting</option>
+            <option value="time">Current time</option>
+            <option value="minimal">· · ·</option>
+            <option value="calm">Calm Space</option>
+            <option value="focus">Focus Mode</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div id="custom-tabname-wrap" style="display:none">
+          <label class="lbl">Custom tab name</label>
+          <input class="fi" id="icustomtabname" type="text" placeholder="My Space…">
+        </div>
+        <div class="toggle-row">
+          <label for="tab-scroll">Scrolling title for long names</label>
+          <label class="tog"><input type="checkbox" id="tab-scroll"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+        </div>
+        <p class="hint">It only comes alive when a name is longer than the tab holds — around 16 characters.</p>
+      </div>
+
+      <!-- VIDEO -->
+      <div class="pane" id="pane-video">
+        <div class="sect">Wallpaper</div>
+        <div class="wall-grid" id="wall-grid">
+          <div class="wall-card" data-wall="gradient" role="button" tabindex="0">
+            <span class="wall-title">Calm Gradient</span>
+          </div>
+          <div class="wall-card" data-wall="video" role="button" tabindex="0">
+            <span class="wall-title">Video Wallpaper</span>
+          </div>
+        </div>
+        <p class="hint" id="wall-hint"></p>
+
+        <div id="video-options">
+          <div class="pdiv"></div>
+          <div id="vdrop">
+            <div style="font-size:26px;margin-bottom:8px">🎬</div>
+            <div>Drop video here or click to browse</div>
+            <div style="font-size:10px;margin-top:5px;opacity:0.55">MP4 recommended •</div>
+            <input type="file" id="vfile" accept="video/*" style="display:none">
+          </div>
+          <div id="vstatus"></div>
+          <button class="rbtn" id="bclrv">Remove video</button>
+
+          <div class="pdiv"></div>
+
+          <div class="sect">Video view</div>
+          <div>
+            <label class="lbl">Zoom</label>
+            <div class="pos-row" style="margin-bottom:0">
+              <label>Zoom</label>
+              <input type="range" id="ivideozoom" min="100" max="250" step="1" value="100">
+              <span id="ivideozoom-v">100%</span>
+            </div>
+          </div>
+          <div>
+            <label class="lbl">Pan (zoom in first)</label>
+            <div class="pos-row">
+              <label>Left</label>
+              <input type="range" id="ivideox" min="-600" max="600" step="1" value="0">
+              <span id="ivideox-v">0</span>
+            </div>
+            <div class="pos-row" style="margin-bottom:0">
+              <label>Up</label>
+              <input type="range" id="ivideoy" min="-600" max="600" step="1" value="0">
+              <span id="ivideoy-v">0</span>
+            </div>
+          </div>
+          <button class="sbtn" id="bresetvideo">Reset video view</button>
+          <p class="hint">Moves the wallpaper, never your widgets. Negatives go left and up, and the panel steps aside while you drag.</p>
+        </div>
+
+        <div id="gradient-options">
+          <div class="pdiv"></div>
+          <div class="sect">Gradient colours</div>
+          <p class="hint">Pick a colour scheme.</p>
+          <div class="grad-grid" id="grad-grid"></div>
+
+          <div class="sect" style="margin-top:14px;">Gradient motion</div>
+          <div class="seg" id="motion-seg">
+            <button class="seg-btn" data-motion="still" type="button">Still</button>
+            <button class="seg-btn" data-motion="slow" type="button">Slow</button>
+            <button class="seg-btn" data-motion="flow" type="button">Flowing</button>
+          </div>
+          <div class="pos-row" style="margin-top:10px;margin-bottom:0;">
+            <label>Speed</label>
+            <input type="range" id="imotionspeed" min="1" max="100" value="50">
+            <span id="imotionspeed-v">50%</span>
+          </div>
+          <p class="hint">Slow and Flowing let the colours drift without a video &mdash; slide Speed for a livelier drift. Either way it rests while the tab is hidden.</p>
+        </div>
+      </div>
+
+      <!-- WIDGETS -->
+      <div class="pane" id="pane-widgets">
+
+        <div class="sect">Visible widgets</div>
+        <p class="hint" style="margin:0 0 2px">Everything here lives on the new tab. Turn one off and it bows out quietly.</p>
+
+        <div class="wlist">
+          <div class="wgroup-label">On the page</div>
+
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">☺︎</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-greet">Greeting</label>
+              <span class="wrow-desc">A line that knows your name.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-greet"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">◷</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-clock">Clock &amp; date</label>
+              <span class="wrow-desc">The time and today's date.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-clock"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">▦</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-calendar">Calendar</label>
+              <span class="wrow-desc">A small month at a glance.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-calendar"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">☁︎</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-weather">Weather</label>
+              <span class="wrow-desc">One city, kept up to date.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-weather"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">❝</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-quote">Quote</label>
+              <span class="wrow-desc">A thought for the moment.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-quote"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">⌕</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-search">Search bar</label>
+              <span class="wrow-desc">Search without leaving the page.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-search"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">⌘</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-shortcuts">Shortcuts</label>
+              <span class="wrow-desc">Your favourite places, one tap away.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-shortcuts"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+
+          <div class="wgroup-label">Extras</div>
+
+          <div id="prayer-settings">
+            <div class="wrow">
+              <span class="wrow-ico" aria-hidden="true">☪︎</span>
+              <span class="wrow-text">
+                <label class="wrow-name" for="w-prayer">Prayer times</label>
+                <span class="wrow-desc">Only appears beside the Qur'an verse.</span>
+              </span>
+              <label class="tog"><input type="checkbox" id="w-prayer"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+            </div>
+            <div class="wsub">
+              <div class="wsub-row">
+                <label for="prayer-remind">Reminder</label>
+                <select class="fi" id="prayer-remind" style="width:132px;padding:6px 28px 6px 10px;font-size:11px;">
+                  <option value="0">Off</option>
+                  <option value="5">5 min before</option>
+                  <option value="10">10 min before</option>
+                  <option value="15">15 min before</option>
+                  <option value="30">30 min before</option>
+                </select>
+              </div>
+              <div class="wsub-row">
+                <label for="w-prayer-sound">Reminder sound</label>
+                <label class="tog"><input type="checkbox" id="w-prayer-sound"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+              </div>
+              <button class="sbtn" id="prayer-test" type="button" style="margin-top:8px;">Test reminder</button>
+              <p class="hint">It appears only while the Qur'an verse category is chosen. The reminder stays within this page, and only while a new tab is open.</p>
+            </div>
+          </div>
+
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">◍</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-status">Device status</label>
+              <span class="wrow-desc">Network, device and storage in one place.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-status"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+        </div>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Search engine</div>
+        <select class="fi" id="isearchengine">
+          <option value="google">Google</option>
+          <option value="brave">Brave Search</option>
+          <option value="ddg">DuckDuckGo</option>
+          <option value="bing">Bing</option>
+          <option value="youtube">YouTube</option>
+        </select>
+        <p class="hint">A full URL or just <strong style="color:rgba(255,255,255,0.7)">example.com</strong> — both are welcome. <kbd>Ctrl</kbd>+<kbd>K</kbd> or <kbd>/</kbd> takes you to the search bar.</p>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Weather</div>
+        <div>
+          <label class="lbl">Location</label>
+          <div style="display:flex;gap:8px;">
+            <input class="fi" id="iweatherloc" type="text" placeholder="City, e.g. Jakarta">
+            <button class="sbtn" id="bweatherset" style="width:auto;padding:9px 16px;flex-shrink:0">Set</button>
+          </div>
+          <p class="hint" style="margin-top:6px">City name only, never GPS. That name goes to Open-Meteo when you set it, and to Aladhan for prayer times whenever Qur'an verses are showing — nowhere else.</p>
+        </div>
+        <div>
+          <label class="lbl">Unit</label>
+          <select class="fi" id="iweatherunit">
+            <option value="c">Celsius (°C)</option>
+            <option value="f">Fahrenheit (°F)</option>
+          </select>
+        </div>
+        <div>
+          <label class="lbl">Refresh every … minutes</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input class="fi" id="iweatherevery" type="number" min="1" max="1440" step="1" placeholder="30">
+            <span class="hint" style="white-space:nowrap">minutes, 1 at the least</span>
+          </div>
+        </div>
+        <button class="sbtn" id="bweathernow">Update now</button>
+        <div id="weather-status" class="hint"></div>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Quote</div>
+        <div>
+          <label class="lbl">Category</label>
+          <select class="fi" id="iquotecat">
+            <option value="general">General</option>
+            <option value="philosophy">Philosophy</option>
+            <option value="bible">Bible verse</option>
+            <option value="quran">Quran verse</option>
+            <option value="custom">Custom (your own)</option>
+            <option value="random">Random mix</option>
+          </select>
+        </div>
+
+        <div id="custom-quote-wrap" style="display:none">
+          <label class="lbl">Your quote</label>
+          <textarea class="fi" id="icustomquote" rows="3" placeholder="Type the quote…"></textarea>
+          <label class="lbl" style="margin-top:6px">Author</label>
+          <input class="fi" id="icustomquoteauthor" type="text" placeholder="e.g. Clovince">
+          <button class="sbtn" id="bsavequote" style="margin-top:8px">Save custom quote</button>
+          <div id="customquote-status" class="hint"></div>
+        </div>
+
+        <div class="toggle-row">
+          <label for="q-auto">Change quotes automatically</label>
+          <label class="tog"><input type="checkbox" id="q-auto"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+        </div>
+
+        <div>
+          <label class="lbl">Every … seconds</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input class="fi" id="iquoteevery" type="number" min="5" max="86400" step="5" placeholder="30">
+            <span class="hint" style="white-space:nowrap">seconds, 5 at the least</span>
+          </div>
+        </div>
+
+        <button class="sbtn" id="bquoterefresh">New quote now</button>
+        <div id="quote-status" class="hint"></div>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Quote text</div>
+        <div class="row2">
+          <div>
+            <label class="lbl">Align</label>
+            <select class="fi" id="iquotealign">
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+              <option value="justify">Justify</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Style</label>
+            <select class="fi" id="iquotestyle">
+              <option value="normal">Normal</option>
+              <option value="italic">Italic</option>
+              <option value="bold">Bold</option>
+              <option value="bolditalic">Bold italic</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="lbl">Text size</label>
+          <div class="pos-row" style="margin-bottom:0">
+            <label>Size</label>
+            <input type="range" id="iquotesize" min="10" max="32" step="1" value="13">
+            <span id="iquotesize-v">13px</span>
+          </div>
+        </div>
+
+        <div class="sect" style="margin-top:10px;">Author / verse reference</div>
+        <div class="row2">
+          <div>
+            <label class="lbl">Align</label>
+            <select class="fi" id="iquoteauthoralign">
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">Style</label>
+            <select class="fi" id="iquoteauthorstyle">
+              <option value="normal">Normal</option>
+              <option value="italic">Italic</option>
+              <option value="bold">Bold</option>
+              <option value="bolditalic">Bold italic</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="lbl">Author size</label>
+          <div class="pos-row" style="margin-bottom:0">
+            <label>Size</label>
+            <input type="range" id="iquoteauthorsize" min="9" max="24" step="1" value="11">
+            <span id="iquoteauthorsize-v">11px</span>
+          </div>
+        </div>
+        <p class="hint">Touches every quote and verse — your own words included.</p>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Performance</div>
+        <div class="toggle-row">
+          <label for="p-pause">Pause wallpaper on hidden tab</label>
+          <label class="tog"><input type="checkbox" id="p-pause"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+        </div>
+        <p class="hint">The video rests while this tab is in the background, and returns when you do.</p>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Layout</div>
+        <p class="hint">See that <strong style="color:rgba(255,255,255,0.7)">⊞</strong> beside the gear? Bottom-right. Drag a widget's little bar to move it, its blue corner to resize it — content grows with the card. Or simply use the <strong style="color:rgba(255,255,255,0.7)">Left / Top sliders</strong> down here; the panel steps aside while you drag so you can see. Reset one, or all of them, whenever it feels off.</p>
+        <div id="pos-controls"></div>
+        <button class="sbtn" id="bresetpos">Reset all widgets</button>
+
+      </div>
+
+      <!-- INFO -->
+      <div class="pane" id="pane-info">
+        <div style="text-align:center;padding:4px 0 12px;">
+          <div style="font-size:19px;font-weight:600;letter-spacing:0.01em;">
+            Newly <span class="badge" id="version-badge" role="button" tabindex="0" title="View changelog" style="cursor:pointer">1.0</span>
+          </div>
+          <div class="hint" style="margin-top:4px;">Liquid Glass · a wallpaper you choose · local-first</div>
+          <div class="hint" style="margin-top:8px;font-style:italic;">Feel free to modify, remix and share it.</div>
+        </div>
+
+        <div class="sect">Credits</div>
+        <div class="credit"><span>Made &amp; designed by</span><a href="https://github.com/zClovince" target="_blank" rel="noopener noreferrer">Clovince</a></div>
+        <div class="credit"><span>Original base</span><a href="https://github.com/TheKaveman12/Custom-New-Tab-for-Brave" target="_blank" rel="noopener noreferrer">TheKaveman12</a></div>
+        <div class="credit"><span>Source &amp; downloads</span><a href="https://github.com/zClovince/Newly" target="_blank" rel="noopener noreferrer">github.com/zClovince/Newly</a></div>
+        <div class="credit"><span>Code ideas &amp; polishing</span><span><a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">ChatGPT</a> · <a href="https://claude.ai/" target="_blank" rel="noopener noreferrer">Claude</a> · <a href="https://gemini.google.com/" target="_blank" rel="noopener noreferrer">Gemini</a></span></div>
+        <div class="credit"><span>Performance &amp; polish</span><a href="https://www.deepseek.com/" target="_blank" rel="noopener noreferrer">DeepSeek</a></div>
+        <div class="credit"><span>Weather &amp; geocoding API</span><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a></div>
+        <div class="credit"><span>Prayer times API</span><a href="https://aladhan.com/prayer-times-api" target="_blank" rel="noopener noreferrer">Aladhan</a></div>
+        <div class="credit"><span>Quotes</span><span><a href="https://dummyjson.com/" target="_blank" rel="noopener noreferrer">dummyjson</a> · <a href="https://bible-api.com/" target="_blank" rel="noopener noreferrer">bible-api.com</a> · <a href="https://alquran.cloud/" target="_blank" rel="noopener noreferrer">alquran.cloud</a></span></div>
+        <div class="credit"><span>Qur'an translation</span><span>M. M. Pickthall (public domain)</span></div>
+
+        <div class="glory">All Glory to God</div>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Privacy</div>
+        <p class="hint">All local. Settings stay in your browser's own storage, the video and icons in an offline cache. No accounts, no tracking, no GPS. Your weather city goes to Open-Meteo, and — only while Qur'an verses are on — that same city goes to Aladhan for prayer times. That's all.</p>
+
+        <div class="sect" style="margin-top:12px;">Shortcuts</div>
+        <div class="credit"><span>Focus search</span><span>Ctrl / ⌘ + K &nbsp;or&nbsp; /</span></div>
+        <div class="credit"><span>Close panel</span><span>Esc</span></div>
+        <div class="credit"><span>Move / resize widgets</span><span>⊞ bottom-right</span></div>
+
+        <div class="pdiv"></div>
+
+        <div class="sect">Backup</div>
+        <p class="hint">Settings only. Your video stays with this device.</p>
+        <div class="row2">
+          <button class="sbtn" id="bexport">Export settings</button>
+          <button class="sbtn" id="bimport">Import settings</button>
+        </div>
+        <input type="file" id="importfile" accept="application/json,.json" style="display:none">
+
+        <div class="pdiv"></div>
+        <p class="hint">Stood on <a href="https://github.com/TheKaveman12/Custom-New-Tab-for-Brave" target="_blank" rel="noopener noreferrer" style="color:#9fe0ff;text-decoration:none"><em>Custom New Tab for Brave</em> v1.0</a> by TheKaveman12. Remixed, rebuilt, shipped as-is.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="copy">un©<a href="https://github.com/zClovince" target="_blank" rel="noopener noreferrer">Clovince</a> – 2026</div>
+
+<!-- prayer times window (only reachable while Quran verses are selected) -->
+<div id="prayer-modal" class="prayer-modal" aria-hidden="true">
+  <div class="prayer-panel glass" role="dialog" aria-modal="true" aria-labelledby="prayer-title">
+    <div class="sp-head">
+      <div>
+        <div class="sp-title" id="prayer-title">Prayer times</div>
+        <div class="prayer-city" id="prayer-city" title="Location from your weather city">—</div>
+        <div class="prayer-loc-note">Times use your weather city — you can change it below, or in <strong>Widgets → Weather</strong>.</div>
+      </div>
+      <button class="xbtn" id="prayer-close" title="Close" aria-label="Close prayer times">✕</button>
+    </div>
+    <div class="prayer-next">
+      <div class="prayer-next-label">Next prayer</div>
+      <div class="prayer-next-name" id="prayer-next-name">—</div>
+      <div class="prayer-next-time" id="prayer-next-time"></div>
+      <div class="prayer-count" id="prayer-count"></div>
+    </div>
+    <div class="prayer-list" id="prayer-list"></div>
+    <div class="prayer-note" id="prayer-note"></div>
+    <div class="ww-field" style="padding-top:12px;">
+      <label class="lbl">City</label>
+      <div style="display:flex;gap:8px;">
+        <input class="fi" id="pw-city-input" type="text" placeholder="City, e.g. Jakarta">
+        <button class="sbtn" id="pw-city-set" style="width:auto;padding:9px 14px;flex-shrink:0">Set</button>
+      </div>
+      <p class="hint" style="margin-top:6px">The same city as the weather card — one place, kept in step.</p>
+    </div>
+  </div>
+</div>
+
+<!-- prayer reminder popup -->
+<div id="prayer-toast" class="prayer-toast" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="pt-title">
+  <div class="pt-card glass">
+    <div class="pt-ico" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.5 14.7A8.6 8.6 0 1 1 11 3.4a7 7 0 0 0 9.5 11.3z"/>
+      </svg>
+    </div>
+    <div class="pt-text">
+      <div class="pt-title" id="pt-title"></div>
+      <div class="pt-sub" id="pt-sub"></div>
+    </div>
+    <button class="xbtn" id="pt-close" title="Dismiss" aria-label="Dismiss reminder">✕</button>
+  </div>
+</div>
+
+<!-- changelog window -->
+<div id="changelog-modal" class="changelog-modal" aria-hidden="true">
+  <div class="changelog-panel glass" role="dialog" aria-modal="true" aria-labelledby="changelog-title">
+    <div class="changelog-head">
+      <div>
+        <div class="changelog-title" id="changelog-title">Changelog</div>
+      </div>
+      <button class="xbtn" id="changelog-close" title="Close" aria-label="Close changelog">✕</button>
+    </div>
+    <div class="changelog-body" id="changelog-body">
+      <div class="clog-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- first-run welcome -->
+<div id="welcome-modal" class="win-modal" aria-hidden="true">
+  <div class="win-panel glass ob-panel" role="dialog" aria-modal="true" aria-labelledby="ob-title">
+    <div class="ob-head">
+      <div class="ob-mark" aria-hidden="true">◍</div>
+      <div>
+        <div class="ob-title" id="ob-title">Welcome to Newly</div>
+        <div class="ob-sub" id="ob-sub">Step 1 of 8</div>
+      </div>
     </div>
 
-    <!-- Clock -->
-    <div id="clock">--:--</div>
+    <div class="ob-steps">
+      <section class="ob-step" data-step="1">
+        <p class="ob-lead">A quiet new tab. Nothing here asks for your attention.</p>
+        <p class="ob-body">Everything you see is yours — move it, resize it, or turn it off. A few small things first, then the page is yours.</p>
+      </section>
 
-    <!-- Link to External JavaScript -->
-    <script src="clock.js"></script>
+      <section class="ob-step" data-step="2" hidden>
+        <label class="lbl" for="ob-name">What should we call you?</label>
+        <input class="fi" id="ob-name" type="text" placeholder="Your name" autocomplete="off" maxlength="40">
+        <p class="ob-preview" id="ob-preview">Hello, you.</p>
+        <p class="hint">Kept on this device only.</p>
+      </section>
+
+      <section class="ob-step" data-step="3" hidden>
+        <label class="lbl" for="ob-city">Where are you?</label>
+        <input class="fi" id="ob-city" type="text" placeholder="City, e.g. Jakarta" autocomplete="off" maxlength="60">
+        <p class="hint">For the weather only. Manual, always — Newly never asks for your location.</p>
+      </section>
+
+      <section class="ob-step" data-step="4" hidden>
+        <label class="lbl">How should the clock read?</label>
+        <div class="seg" id="ob-hour">
+          <button class="seg-btn on" data-hour="12" type="button">12-hour</button>
+          <button class="seg-btn" data-hour="24" type="button">24-hour</button>
+        </div>
+        <label class="lbl" style="margin-top:12px;">Where should the time come from?</label>
+        <div class="seg" id="ob-timesrc">
+          <button class="seg-btn on" data-src="device" type="button">This device</button>
+          <button class="seg-btn" data-src="city" type="button">Weather city</button>
+        </div>
+        <p class="hint">"Weather city" follows the city you just set, time zone and all.</p>
+      </section>
+
+      <section class="ob-step" data-step="5" hidden>
+        <label class="lbl">Where should search go?</label>
+        <select class="fi" id="ob-engine">
+          <option value="google">Google</option>
+          <option value="brave">Brave Search</option>
+          <option value="ddg">DuckDuckGo</option>
+          <option value="bing">Bing</option>
+          <option value="youtube">YouTube</option>
+        </select>
+        <p class="hint">Your search bar uses this. Change it any time in Settings.</p>
+      </section>
+
+      <section class="ob-step" data-step="6" hidden>
+        <label class="lbl">A thought for the moment</label>
+        <div class="ob-cats" id="ob-cats"></div>
+        <p class="hint">Change it any time from the quote window. Choose Custom to write your own.</p>
+      </section>
+
+      <section class="ob-step" data-step="7" hidden>
+        <label class="lbl">How should the glass feel?</label>
+        <div class="preset-row" id="ob-glass-presets">
+          <button class="preset" data-preset="clear" type="button">Clear</button>
+          <button class="preset" data-preset="frosted" type="button">Frosted</button>
+          <button class="preset" data-preset="tinted" type="button">Tinted</button>
+          <button class="preset" data-preset="liquid" type="button">Liquid</button>
+        </div>
+        <div class="ob-glass-pane">
+          <div class="pos-row" style="margin-bottom:6px;">
+            <label>Blur</label>
+            <input type="range" id="ob-glass-blur" min="0" max="80" value="30">
+            <span id="ob-glass-blur-v">30px</span>
+          </div>
+          <div class="pos-row" style="margin-bottom:0;">
+            <label>Opacity</label>
+            <input type="range" id="ob-glass-alpha" min="0" max="40" value="10">
+            <span id="ob-glass-alpha-v">10%</span>
+          </div>
+        </div>
+        <label class="lbl" style="margin-top:2px;">Tint</label>
+        <div class="swatch-grid" id="ob-glass-swatches"></div>
+        <div class="tint-custom">
+          <input type="color" id="ob-glass-tint" value="#ffffff">
+          <span class="hint">Or pick your own tint.</span>
+        </div>
+        <p class="hint">This very card is the glass &mdash; every change lands the moment you make it.</p>
+      </section>
+
+      <section class="ob-step" data-step="8" hidden>
+        <label class="lbl">A wallpaper to start with</label>
+        <div class="seg" id="ob-wall">
+          <button class="seg-btn on" data-wall="gradient" type="button">Calm Gradient</button>
+          <button class="seg-btn" data-wall="video" type="button">Video</button>
+        </div>
+        <div id="ob-grad-wrap" style="margin-top:10px;">
+          <div class="ob-swatches" id="ob-swatches"></div>
+          <label class="lbl" style="margin-top:10px;">Drift</label>
+          <div class="seg" id="ob-motion">
+            <button class="seg-btn" data-motion="still" type="button">Still</button>
+            <button class="seg-btn on" data-motion="slow" type="button">Slow</button>
+            <button class="seg-btn" data-motion="flow" type="button">Flowing</button>
+          </div>
+          <div class="pos-row" style="margin-top:8px;margin-bottom:0;">
+            <label>Speed</label>
+            <input type="range" id="ob-motion-speed" min="1" max="100" value="50">
+            <span id="ob-motion-speed-v">50%</span>
+          </div>
+        </div>
+        <div id="ob-vid-wrap" style="margin-top:10px;display:none;">
+          <div class="ob-drop" id="ob-vdrop">
+            <div style="font-size:22px;margin-bottom:6px">🎬</div>
+            <div>Drop a video here, or click to browse</div>
+            <div style="font-size:10px;margin-top:5px;opacity:0.55">MP4 recommended</div>
+            <input type="file" id="ob-vfile" accept="video/*" style="display:none">
+          </div>
+          <div class="ob-vstatus" id="ob-vstatus"></div>
+          <button class="mini-btn" id="ob-vclear" type="button" style="display:none;margin:6px auto 0;">Remove video</button>
+        </div>
+        <p class="hint" id="ob-wall-hint">Calm Gradient is soft and light on the battery.</p>
+      </section>
+    </div>
+
+    <div class="ob-dots" aria-hidden="true">
+      <span class="on"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+
+    <div class="ob-foot">
+      <button class="mini-btn" id="ob-back" type="button" style="visibility:hidden;">Back</button>
+      <div style="display:flex;gap:8px;">
+        <button class="mini-btn" id="ob-skip" type="button">Skip</button>
+        <button class="sbtn" id="ob-next" type="button" style="width:auto;padding:9px 18px;">Begin</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- weather window -->
+<div id="weather-modal" class="win-modal" aria-hidden="true">
+  <div class="win-panel glass win-wide" role="dialog" aria-modal="true" aria-labelledby="weather-title">
+    <div class="sp-head">
+      <div>
+        <div class="sp-title" id="weather-title">Today's weather</div>
+        <div class="win-sub" id="ww-city">—</div>
+      </div>
+      <button class="xbtn" id="weather-close" title="Close" aria-label="Close weather">✕</button>
+    </div>
+    <div class="ww-now" id="ww-now"></div>
+    <p class="ww-status" id="ww-status" aria-live="polite"></p>
+    <div class="ww-segs" id="ww-segs"></div>
+    <p class="ww-note">Forecasts are a guess — sometimes the sky disagrees.</p>
+    <div class="ww-field">
+      <label class="lbl">City</label>
+      <div style="display:flex;gap:8px;">
+        <input class="fi" id="ww-city-input" type="text" placeholder="City, e.g. Jakarta">
+        <button class="sbtn" id="ww-city-set" style="width:auto;padding:9px 14px;flex-shrink:0">Set</button>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label class="lbl">Unit</label>
+        <select class="fi" id="ww-unit"><option value="c">Celsius (°C)</option><option value="f">Fahrenheit (°F)</option></select>
+      </div>
+      <div>
+        <label class="lbl">Refresh (minutes)</label>
+        <input class="fi" id="ww-every" type="number" min="1" max="1440" step="1" placeholder="30">
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;">
+      <a class="ww-link" id="ww-link" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo ↗</a>
+      <button class="mini-btn" id="ww-refresh" type="button">Update now</button>
+    </div>
+  </div>
+</div>
+
+<!-- calendar window -->
+<div id="calendar-modal" class="win-modal" aria-hidden="true">
+  <div class="win-panel glass" role="dialog" aria-modal="true" aria-labelledby="calwin-title">
+    <div class="sp-head">
+      <div>
+        <div class="sp-title" id="calwin-title">Calendar</div>
+        <div class="win-sub" id="calwin-sub"></div>
+      </div>
+      <button class="xbtn" id="calendar-close" title="Close" aria-label="Close calendar">✕</button>
+    </div>
+    <div class="calwin-nav">
+      <button class="mini-btn" id="calwin-prev" type="button" aria-label="Previous month">‹</button>
+      <div class="calwin-month" id="calwin-month">—</div>
+      <button class="mini-btn" id="calwin-next" type="button" aria-label="Next month">›</button>
+    </div>
+    <div class="calwin-grid" id="calwin-grid"></div>
+    <div class="seg" id="calwin-source">
+      <button class="seg-btn" data-src="device" type="button">This device</button>
+      <button class="seg-btn" data-src="city" type="button">Weather city</button>
+    </div>
+    <p class="hint" id="calwin-hint" style="margin-top:8px;text-align:center;">January to December of the current year.</p>
+  </div>
+</div>
+
+<!-- clock window -->
+<div id="clock-modal" class="win-modal" aria-hidden="true">
+  <div class="win-panel glass" role="dialog" aria-modal="true" aria-labelledby="clockwin-title">
+    <div class="sp-head">
+      <div>
+        <div class="sp-title" id="clockwin-title">Clock &amp; date</div>
+      </div>
+      <button class="xbtn" id="clockwin-close" title="Close" aria-label="Close clock">✕</button>
+    </div>
+    <label class="lbl">Clock style</label>
+    <div class="clock-grid" id="clockwin-style-grid"></div>
+    <div class="row2" style="margin-top:10px;">
+      <div>
+        <label class="lbl">Hour format</label>
+        <select class="fi" id="clockwin-hour">
+          <option value="12">12-hour</option>
+          <option value="24">24-hour</option>
+        </select>
+      </div>
+      <div>
+        <label class="lbl">Show seconds</label>
+        <select class="fi" id="clockwin-secs">
+          <option value="0">No</option>
+          <option value="1">Yes</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <label class="lbl">Date format</label>
+      <select class="fi" id="clockwin-datefmt">
+        <option value="long">Fri, June 26</option>
+        <option value="short">26/06/2026</option>
+        <option value="us">06/26/2026</option>
+        <option value="iso">2026-06-26</option>
+        <option value="none">Hide date</option>
+      </select>
+    </div>
+    <div style="margin-top:10px;">
+      <label class="lbl">Clock &amp; date size</label>
+      <div class="pos-row" style="margin-bottom:0">
+        <label>Size</label>
+        <input type="range" id="clockwin-size" min="16" max="80" step="1" value="30">
+        <span id="clockwin-size-v">30px</span>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+        <button class="mini-btn" id="clockwin-size-reset" type="button">Reset size</button>
+      </div>
+    </div>
+    <label class="lbl" style="margin-top:12px;">Time source</label>
+    <div class="seg" id="clockwin-source">
+      <button class="seg-btn" data-src="device" type="button">This device</button>
+      <button class="seg-btn" data-src="city" type="button">Weather city</button>
+    </div>
+  </div>
+</div>
+
+<!-- greeting window -->
+<div id="greeting-modal" class="win-modal" aria-hidden="true">
+  <div class="win-panel glass" role="dialog" aria-modal="true" aria-labelledby="gw-title">
+    <div class="sp-head">
+      <div>
+        <div class="sp-title" id="gw-title">Greeting</div>
+        <div class="win-sub">Make it sound like you</div>
+      </div>
+      <button class="xbtn" id="greeting-close" title="Close" aria-label="Close greeting">✕</button>
+    </div>
+    <div class="greet-preview" id="gw-preview">
+      <div class="greet-preview-label">On your new tab</div>
+      <div class="greet-preview-text" id="gw-preview-text">Hi, friend!</div>
+    </div>
+    <div style="margin-top:12px;">
+      <label class="lbl">Your name</label>
+      <input class="fi" id="gw-name" type="text" placeholder="e.g. Clovince">
+    </div>
+    <div style="margin-top:10px;">
+      <label class="lbl">Greeting style</label>
+      <select class="fi" id="gw-style">
+        <option value="hi">Hi, {name}!</option>
+        <option value="hey">Hey, {name} 👋</option>
+        <option value="welcome">Welcome back, {name}!</option>
+        <option value="good">Good {time}, {name}!</option>
+        <option value="none">None (hide)</option>
+        <option value="custom">Custom text...</option>
+      </select>
+    </div>
+    <div id="gw-custom-wrap" style="display:none;margin-top:10px;">
+      <label class="lbl">Custom greeting text</label>
+      <input class="fi" id="gw-custom" type="text" placeholder="Type anything...">
+    </div>
+    <div class="row3" style="margin-top:12px;">
+      <div>
+        <label class="lbl">Weight</label>
+        <select class="fi" id="gw-weight">
+          <option value="300">Light</option>
+          <option value="400">Regular</option>
+          <option value="600">Semi-bold</option>
+          <option value="700">Bold</option>
+        </select>
+      </div>
+      <div>
+        <label class="lbl">Style</label>
+        <select class="fi" id="gw-italic">
+          <option value="normal">Normal</option>
+          <option value="italic">Italic</option>
+        </select>
+      </div>
+      <div>
+        <label class="lbl">Size</label>
+        <select class="fi" id="gw-size">
+          <option value="16px">XS</option>
+          <option value="18px">S</option>
+          <option value="22px">M</option>
+          <option value="28px">L</option>
+          <option value="36px">XL</option>
+          <option value="48px">XXL</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      <label class="lbl">Greeting color</label>
+      <div class="swatch-grid" id="gw-colors"></div>
+    </div>
+  </div>
+</div>
+
+<!-- quote window -->
+<div id="quote-modal" class="win-modal" aria-hidden="true">
+  <div class="win-panel glass" role="dialog" aria-modal="true" aria-labelledby="qw-title">
+    <div class="sp-head">
+      <div>
+        <div class="sp-title" id="qw-title">Quote</div>
+        <div class="win-sub" id="qw-sub">Choose a voice</div>
+      </div>
+      <button class="xbtn" id="quote-close" title="Close" aria-label="Close quote">✕</button>
+    </div>
+    <div class="qw-now" id="qw-now">
+      <div class="qw-now-label">On your new tab now</div>
+      <div class="qw-now-text" id="qw-now-text">Loading…</div>
+      <div class="qw-now-author" id="qw-now-author"></div>
+    </div>
+    <label class="lbl" style="margin-top:14px;">Where it comes from</label>
+    <div class="qw-cats" id="qw-cats" role="group" aria-label="Quote category"></div>
+    <label class="lbl" style="margin-top:14px;">Refresh on its own</label>
+    <select class="fi" id="qw-every">
+      <option value="0">Stay on the same one</option>
+      <option value="60">Every minute</option>
+      <option value="300">Every 5 minutes</option>
+      <option value="900">Every 15 minutes</option>
+      <option value="1800">Every 30 minutes</option>
+      <option value="3600">Every hour</option>
+      <option value="10800">Every 3 hours</option>
+    </select>
+    <div class="qw-own-row">
+      <span>Or your own pace</span>
+      <input class="fi" id="qw-every-secs" type="number" min="5" max="86400" step="1" placeholder="seconds">
+      <span class="qw-own-unit">sec</span>
+    </div>
+    <p class="hint" style="margin-top:6px">Picking a source brings a fresh one straight away. Quotes you wrote yourself never change on their own.</p>
+    <div id="qw-custom-wrap" style="display:none;margin-top:12px;">
+      <label class="lbl">Your quote</label>
+      <textarea class="fi" id="qw-custom-text" rows="3" placeholder="Type the quote..."></textarea>
+      <label class="lbl" style="margin-top:6px;">Author</label>
+      <input class="fi" id="qw-custom-author" type="text" placeholder="e.g. Clovince">
+      <button class="sbtn" id="qw-custom-save" style="margin-top:8px;">Save custom quote</button>
+      <div id="qw-status" class="hint"></div>
+    </div>
+  </div>
+</div>
+
+<!-- small confirmation toast -->
+<div id="note-toast" role="status" aria-live="polite"></div>
+
+<script src="script.js"></script>
 </body>
 </html>

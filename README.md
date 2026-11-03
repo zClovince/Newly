@@ -36,11 +36,10 @@ Indonesian step-by-step: see **`CARA-INSTALL.txt`**.
 - Liquid Glass design guidance: [Apple — Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass). SVG-displacement approach inspired by the liquid-glass CSS recipes collected at [freefrontend.com](https://freefrontend.com/). The lens, its runtime map and the sheet structure are Newly's own implementation.
 - Made & designed by **[Clovince](https://github.com/zClovince)**
 - Code ideas & polishing: **[ChatGPT](https://chatgpt.com/) · [Claude](https://claude.ai/) · [Gemini](https://gemini.google.com/)**
-- Code Implementation, Fixing etc by **[Deepseek](https://https://www.deepseek.com/
-- Earlier performance passes, UI polish, rain timing and Firefox support: **[DeepSeek](https://www.deepseek.com/)**
-- Weather & geocoding: **Open-Meteo**
-- Prayer times: **Aladhan**
-- Quotes: **dummyjson**, **bible-api.com**, **alquran.cloud**
+- All in one coding, fixing, UI Polish by: **[DeepSeek](https://www.deepseek.com/)**
+- Weather & geocoding: **Open-Meteo** [Open-Meteo](https://open-meteo.com/)
+- Prayer times: [Aladhan](https://aladhan.com/prayer-times-api) 
+- Quotes: **dummyjson**, [bible-api.com](https://bible-api.com)/, [alquran.cloud](https://alquran.cloud)
 - Qur'an translation: **Muhammad Marmaduke Pickthall** (public domain)
 
-unCopyright © [Clovince](https://github.com/zClovince) – 2026. Remix it, break it, improve it.
+[Clovince](https://github.com/zClovince) – 2026. Remix it, break it, improve it.

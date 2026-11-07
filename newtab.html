@@ -48,29 +48,75 @@ body{
 }
 
 /* battery-saver / no-video gradient layer.
-   The calm gradient is a still base plus one soft, slowly drifting layer.
-   Motion is a transform on a single oversized pseudo-element, so it lives on
-   the compositor and never repaints the whole page each frame — that is what
-   keeps it kind to a modest laptop. The level lives on body[data-motion]. */
+   The calm gradient is a still wash plus a field of layered silk waves: a
+   stack of parallel wavy ribbons tilted so they run upper-left to lower-right,
+   each with a soft shadow along its leading edge. The whole field is one SVG,
+   built once, then only slid along the band direction on the compositor — the
+   paint cost is paid a single time and a modest laptop stays calm. The slide
+   is exactly one wavelength, so it loops with no visible seam. The motion
+   level lives on body[data-motion], the speed slider drives --grad-dur, and
+   the flow arrows choose the drift direction through --wave-tx/--wave-ty. */
 #fallback-bg{
   position:fixed;inset:0;z-index:0;display:none;overflow:hidden;
   background:var(--grad-bg,linear-gradient(125deg,#241a44,#0d2438 32%,#3a1b3d 62%,#08182b));
 }
-#fallback-bg::before{
-  content:"";position:absolute;inset:-22%;
-  background-image:var(--grad-blob,none);
-  background-repeat:no-repeat;
-  transform:translate3d(0,0,0) scale(1.15);
+#wave-bg{
+  position:absolute;inset:0;z-index:0;pointer-events:none;
+  width:100%;height:100%;
+}
+#wave-bg svg{display:block;width:100%;height:100%;}
+
+:root{
+  --wave-dx:0px;
+  --wave-dy:0px;
+  --wave-step:0px;
+  --wave-tx:var(--wave-dx);
+  --wave-ty:var(--wave-dy);
+  --wave-dir:normal;
+  --wave-ease:linear;
+}
+.wave-flow{
+  transform:translate3d(0,0,0);
   will-change:transform;
 }
-/* the calm cycle length is a variable so the Drift speed slider can drive it */
-body[data-motion="slow"] #fallback-bg::before{animation:grad-float var(--grad-dur,40s) ease-in-out infinite;}
-body[data-motion="flow"] #fallback-bg::before{animation:grad-float calc(var(--grad-dur,40s) * 0.45) ease-in-out infinite;}
-@keyframes grad-float{
-  0%   {transform:translate3d(-5%,-4%,0) scale(1.14) rotate(0deg);}
-  33%  {transform:translate3d(5%,3%,0)  scale(1.24) rotate(5deg);}
-  66%  {transform:translate3d(-3%,5%,0) scale(1.16) rotate(-4deg);}
-  100% {transform:translate3d(-5%,-4%,0) scale(1.14) rotate(0deg);}
+@keyframes wave-slide{
+  from{transform:translate3d(0,0,0);}
+  to{transform:translate3d(var(--wave-tx),var(--wave-ty),0);}
+}
+/* continuous: one seamless wavelength per loop */
+:root[data-flow="ltr"]{
+  --wave-tx:var(--wave-dx);
+  --wave-ty:var(--wave-dy);
+  --wave-dir:normal;--wave-ease:linear;
+}
+:root[data-flow="rtl"]{
+  --wave-tx:calc(var(--wave-dx) * -1);
+  --wave-ty:calc(var(--wave-dy) * -1);
+  --wave-dir:normal;--wave-ease:linear;
+}
+/* rocking: alternate + ease-in-out, so the loop never snaps */
+:root[data-flow="ttb"]{--wave-tx:0px;--wave-ty:var(--wave-step);
+  --wave-dir:alternate;--wave-ease:ease-in-out;}
+:root[data-flow="btt"]{--wave-tx:0px;--wave-ty:calc(var(--wave-step) * -1);
+  --wave-dir:alternate;--wave-ease:ease-in-out;}
+:root[data-flow="br"] {--wave-tx:calc(var(--wave-dx) * 0.3); --wave-ty:calc(var(--wave-dy) * 0.3);
+  --wave-dir:alternate;--wave-ease:ease-in-out;}
+:root[data-flow="tl"] {--wave-tx:calc(var(--wave-dx) * -0.3);--wave-ty:calc(var(--wave-dy) * -0.3);
+  --wave-dir:alternate;--wave-ease:ease-in-out;}
+:root[data-flow="tr"] {--wave-tx:calc(var(--wave-dx) * 0.18); --wave-ty:calc(var(--wave-dy) * -0.18);
+  --wave-dir:alternate;--wave-ease:ease-in-out;}
+:root[data-flow="bl"] {--wave-tx:calc(var(--wave-dx) * -0.18);--wave-ty:calc(var(--wave-dy) * 0.18);
+  --wave-dir:alternate;--wave-ease:ease-in-out;}
+body[data-motion="still"] .wave-flow{animation:none;}
+body[data-motion="slow"] .wave-flow{
+  animation:wave-slide var(--grad-dur,40s) var(--wave-ease,linear) infinite var(--wave-dir,normal);
+}
+body[data-motion="flow"] .wave-flow{
+  animation:wave-slide calc(var(--grad-dur,40s) * 0.45) var(--wave-ease,linear) infinite var(--wave-dir,normal);
+}
+@media (prefers-reduced-motion: reduce){
+  .wave-flow,
+  body[data-motion] .wave-flow{animation:none !important;}
 }
 body.battery-saver #fallback-bg{display:block;}
 body.battery-saver #background{display:none;}
@@ -185,15 +231,17 @@ body.glass-liquid .prayer-modal::before,
 body.glass-liquid .changelog-modal::before{
   content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
   background:rgba(0,0,0,0);
-  -webkit-backdrop-filter:blur(var(--glass-scrim-blur,12px));
-  backdrop-filter:blur(var(--glass-scrim-blur,12px));
-  transition:background-color 0.28s ease;
+  -webkit-backdrop-filter:blur(0px);
+  backdrop-filter:blur(0px);
+  transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;
 }
 body.glass-liquid #overlay.open-anim::before,
 body.glass-liquid .win-modal.in::before,
 body.glass-liquid .prayer-modal.in::before,
 body.glass-liquid .changelog-modal.open::before{
   background:rgba(0,0,0,0.18);
+  -webkit-backdrop-filter:blur(var(--glass-scrim-blur,12px));
+  backdrop-filter:blur(var(--glass-scrim-blur,12px));
 }
 /* The sheet itself is a denser material than a card: more blur, same lens. */
 body.glass-liquid #panel,
@@ -385,7 +433,7 @@ body.layout-editing .draggable.glass{
   position:fixed;bottom:34px;right:138px;z-index:300;
   height:46px;padding:0 14px;border-radius:14px;
   display:flex;align-items:center;gap:9px;
-  max-width:190px;
+  max-width:236px;
   color:#fff;cursor:pointer;
   font-size:11px;letter-spacing:0.02em;font-family:inherit;
   transition:background 0.2s ease,scale 0.2s ease,translate 0.26s ease,opacity 0.22s ease,filter 0.22s ease;
@@ -434,6 +482,12 @@ body.layout-editing .draggable.glass{
 .sp-foot{display:flex;align-items:center;gap:8px;padding-top:10px;flex-wrap:wrap;}
 #sp-test-out{font-size:10px;color:rgba(255,255,255,0.55);}
 .sp-v.new{color:#9fe0ff;}
+#sp-update-open{
+  color:#ffe08a;
+  border-color:rgba(255,200,80,0.42);
+  background:rgba(255,200,80,0.12);
+}
+#sp-update-open:hover{background:rgba(255,200,80,0.22);color:#fff;}
 
 @media (max-width:1180px){
   #status-tile{bottom:92px;right:24px;}
@@ -449,18 +503,18 @@ body.layout-editing .draggable.glass{
 #overlay{
   position:fixed;inset:0;z-index:200;
   background:rgba(0,0,0,0);
-  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+  -webkit-backdrop-filter:blur(0px);backdrop-filter:blur(0px);
   display:none;align-items:center;justify-content:center;
-  /* the dim fades through its own colour, never through opacity: a group
-     opacity would switch the glass blur off mid-animation */
-  transition:background-color 0.28s ease;
+  /* the dim and its blur fade through their own properties, never through
+     opacity: a group opacity would switch the glass blur off mid-animation */
+  transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;
   pointer-events:none;
 }
 #overlay.open{
   display:flex;
   pointer-events:auto;
 }
-#overlay.open-anim{background:rgba(0,0,0,0.5);}
+#overlay.open-anim{background:rgba(0,0,0,0.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
 
 /* Panel open/close animation */
 #panel{
@@ -981,6 +1035,7 @@ input[type=range]::-moz-range-thumb{
   transition:background 0.2s ease;
 }
 .wrow+.wrow::before,
+.wsub+.wrow::before,
 #prayer-settings+.wrow::before{
   content:"";
   position:absolute;left:14px;right:14px;top:0;height:1px;
@@ -1393,11 +1448,11 @@ textarea.fi{
   position:fixed;inset:0;z-index:900;
   display:none;align-items:center;justify-content:center;
   padding:24px;background:rgba(0,0,0,0);
-  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
-  transition:background-color 0.28s ease;pointer-events:none;
+  -webkit-backdrop-filter:blur(0px);backdrop-filter:blur(0px);
+  transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;pointer-events:none;
 }
 .prayer-modal.open{display:flex;pointer-events:auto;}
-.prayer-modal.in{background:rgba(0,0,0,0.5);}
+.prayer-modal.in{background:rgba(0,0,0,0.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
 .prayer-panel{
   width:min(340px,92vw);max-height:82vh;overflow-y:auto;
   overscroll-behavior:contain;
@@ -1513,8 +1568,25 @@ code{
   }
 }
 
-/* ── accessibility ── */
-@media (prefers-reduced-motion: reduce){
+/* ── window-resize glide ──
+   While the browser window is being resized the cards glide to their new
+   spots instead of jumping, matching the search bar's own motion. The class
+   is only present during a resize, so dragging a card stays 1:1. */
+body.win-resizing #shortcuts,
+body.win-resizing #datetime,
+body.win-resizing #calendar,
+body.win-resizing #prayer,
+body.win-resizing #greeting-wrap,
+body.win-resizing #searchbar,
+body.win-resizing #weather,
+body.win-resizing #quote{
+  transition:left 0.30s cubic-bezier(0.25,1,0.5,1),
+             top 0.30s cubic-bezier(0.25,1,0.5,1),
+             width 0.30s cubic-bezier(0.25,1,0.5,1),
+             height 0.30s cubic-bezier(0.25,1,0.5,1);
+}
+
+/* ── accessibility ── */@media (prefers-reduced-motion: reduce){
   *,*::before,*::after{
     animation-duration:0.001ms!important;
     animation-iteration-count:1!important;
@@ -1619,11 +1691,11 @@ input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:tex
   position:fixed;inset:0;z-index:820;
   display:none;align-items:center;justify-content:center;
   padding:24px;background:rgba(0,0,0,0);
-  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
-  transition:background-color 0.28s ease;pointer-events:none;
+  -webkit-backdrop-filter:blur(0px);backdrop-filter:blur(0px);
+  transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;pointer-events:none;
 }
 .win-modal.open{display:flex;pointer-events:auto;}
-.win-modal.in{background:rgba(0,0,0,0.5);}
+.win-modal.in{background:rgba(0,0,0,0.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
 .win-panel{
   width:min(360px,92vw);max-height:84vh;overflow-y:auto;
   overscroll-behavior:contain;
@@ -1856,12 +1928,18 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
 .seg-btn:hover{color:var(--fg);}
 .seg-btn.on{color:#fff;font-weight:600;background:linear-gradient(180deg,rgba(255,255,255,0.30),rgba(255,255,255,0.20));box-shadow:0 1px 3px rgba(0,0,0,0.30),inset 0 1px 0 rgba(255,255,255,0.35);}
 
+/* flow-direction pad: a little arrow grid, no text to translate */
+.flowpad{display:grid;grid-template-columns:repeat(3,40px);grid-auto-rows:34px;gap:3px;justify-content:center;padding:3px;border-radius:14px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.08);width:max-content;margin:0 auto;}
+.flowpad .seg-btn{border-radius:9px;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;}
+.flowpad .flow-spacer{visibility:hidden;}
+
 /* calendar window */
+#calendar-modal .win-panel{width:min(var(--calwin-w,360px),92vw);}
 .calwin-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 6px;}
-.calwin-month{font-size:14px;font-weight:600;letter-spacing:0.02em;}
-.calwin-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;padding-bottom:8px;}
-.calwin-grid .cal-day{font-size:12px;min-height:30px;border-radius:9px;}
-.calwin-grid .cal-dow{font-size:9px;padding-bottom:4px;}
+.calwin-month{font-size:calc(var(--calwin-day-size,12px) * 1.15);font-weight:600;letter-spacing:0.02em;}
+.calwin-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:calc(var(--calwin-day-size,12px) * 0.34);text-align:center;padding-bottom:8px;}
+.calwin-grid .cal-day{font-size:var(--calwin-day-size,12px);min-height:calc(var(--calwin-day-size,12px) * 2.5);border-radius:9px;}
+.calwin-grid .cal-dow{font-size:calc(var(--calwin-day-size,12px) * 0.72);padding-bottom:4px;}
 .calwin-grid .cal-day.today{background:rgba(90,200,250,0.30);box-shadow:inset 0 0 0 1px rgba(90,200,250,0.55);color:#fff;font-weight:600;}
 @keyframes calin-spring{from{opacity:0;transform:translateY(10px) scale(0.97);}to{opacity:1;transform:none;}}
 @keyframes calin-fade{from{opacity:0;}to{opacity:1;}}
@@ -1884,6 +1962,33 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
 /* status popover closing animation */
 .status-pop.closing{animation:sp-out 0.2s ease forwards;}
 @keyframes sp-out{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(8px) scale(0.98);}}
+
+/* ── performance prompt ──
+   A calm question, not a silent downgrade. It sits in the same corner as the
+   status popover but uses a solid surface (no backdrop blur of its own), so
+   it stays readable and cheap on the very device it is asking about. */
+.perf-pop{
+  position:fixed;bottom:92px;right:24px;z-index:960;
+  width:min(320px,calc(100vw - 48px));
+  padding:14px 16px 14px;border-radius:18px;
+  color:#fff;display:none;
+  background:rgba(22,22,28,0.96);
+  border:1px solid rgba(255,255,255,0.16);
+  box-shadow:0 16px 40px rgba(0,0,0,0.48);
+}
+.perf-pop.open{display:block;animation:sp-in 0.22s cubic-bezier(0.34,1.2,0.64,1);}
+.perf-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:8px;}
+.perf-title{font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;opacity:0.82;}
+.perf-text{margin:0;font-size:12px;line-height:1.55;opacity:0.78;}
+.perf-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:12px;flex-wrap:wrap;}
+#perf-pop-classic{
+  color:#ffe08a;
+  border-color:rgba(255,200,80,0.42);
+  background:rgba(255,200,80,0.12);
+}
+#perf-pop-classic:hover{background:rgba(255,200,80,0.22);color:#fff;}
+@media (max-width:1180px){ .perf-pop{bottom:150px;} }
+@media (max-width:960px){ .perf-pop{bottom:208px;} }
 
 /* small aesthetic confirmation toast */
 #note-toast{
@@ -2109,7 +2214,21 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
   <div class="sp-foot">
     <button class="mini-btn" id="sp-test" type="button" title="Ping Google (gstatic)">Test connection</button>
     <button class="mini-btn" id="sp-update-check" type="button" title="Look for a newer release on GitHub">Check for updates</button>
+    <button class="mini-btn" id="sp-update-open" type="button" title="Open the Newly releases page on GitHub" hidden>Update</button>
     <span id="sp-test-out"></span>
+  </div>
+</div>
+
+<!-- performance prompt: only appears when Liquid Glass is measured as slow -->
+<div id="perf-pop" class="perf-pop" role="dialog" aria-label="Performance suggestion" aria-hidden="true">
+  <div class="perf-head">
+    <span class="perf-title">A gentler glass?</span>
+    <button class="xbtn" id="perf-pop-close" type="button" title="Dismiss" aria-label="Dismiss">✕</button>
+  </div>
+  <p class="perf-text">Liquid Glass is running slowly on this device. Switch to the original blur? You can change it back anytime in Display.</p>
+  <div class="perf-actions">
+    <button class="mini-btn" id="perf-pop-keep" type="button">Keep Liquid Glass</button>
+    <button class="mini-btn" id="perf-pop-classic" type="button">Use original blur</button>
   </div>
 </div>
 
@@ -2270,10 +2389,10 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
           <label class="lbl">Calendar size</label>
           <div class="pos-row" style="margin-bottom:0">
             <label>Size</label>
-            <input type="range" id="icalsize" min="8" max="20" step="1" value="9">
+            <input type="range" id="icalsize" min="8" max="28" step="1" value="9">
             <span id="icalsize-v">9px</span>
           </div>
-          <p class="hint">Scales the whole calendar card — numbers, grid, and padding.</p>
+          <p class="hint">Scales the whole calendar — the card, the numbers inside it, and the calendar window. The same control lives in Widgets and in the calendar window itself.</p>
         </div>
         <div>
           <label class="lbl">Time source</label>
@@ -2510,10 +2629,12 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
           </div>
           <div class="pos-row" style="margin-top:10px;margin-bottom:0;">
             <label>Speed</label>
-            <input type="range" id="imotionspeed" min="1" max="100" value="50">
-            <span id="imotionspeed-v">50%</span>
+            <input type="range" id="imotionspeed" min="1" max="100" value="60">
+            <span id="imotionspeed-v">60%</span>
           </div>
-          <p class="hint">Slow and Flowing let the colours drift without a video &mdash; slide Speed for a livelier drift. Either way it rests while the tab is hidden.</p>
+          <label class="lbl" style="margin-top:12px;">Flow direction</label>
+          <div class="flowpad" id="flow-seg"></div>
+          <p class="hint">Slow and Flowing let the colours drift without a video &mdash; slide Speed for a livelier drift, and point the arrows the way the waves should travel. Either way it rests while the tab is hidden.</p>
         </div>
       </div>
 
@@ -2549,6 +2670,14 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
               <span class="wrow-desc">A small month at a glance.</span>
             </span>
             <label class="tog"><input type="checkbox" id="w-calendar"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wsub">
+            <div class="wsub-row">
+              <label for="icalsize-w">Size</label>
+              <input type="range" id="icalsize-w" min="8" max="28" step="1" value="9" style="flex:1;max-width:150px;">
+              <span id="icalsize-w-v">9px</span>
+            </div>
+            <p class="hint">Resizes the calendar everywhere — the card, the numbers inside it, and the calendar window. Handy on a big monitor.</p>
           </div>
           <div class="wrow">
             <span class="wrow-ico" aria-hidden="true">☁︎</span>
@@ -2788,7 +2917,7 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
       <div class="pane" id="pane-info">
         <div style="text-align:center;padding:4px 0 12px;">
           <div style="font-size:19px;font-weight:600;letter-spacing:0.01em;">
-            Newly <span class="badge" id="version-badge" role="button" tabindex="0" title="View changelog" style="cursor:pointer">2.0</span>
+            Newly <span class="badge" id="version-badge" role="button" tabindex="0" title="View changelog" style="cursor:pointer">2.1</span>
           </div>
           <div class="hint" style="margin-top:4px;">Liquid Glass · a wallpaper you choose · local-first</div>
           <div class="hint" style="margin-top:8px;font-style:italic;">Feel free to modify, remix and share it.</div>
@@ -2911,8 +3040,9 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
 
     <div class="ob-steps">
       <section class="ob-step" data-step="1">
-        <p class="ob-lead">A quiet new tab. Nothing here asks for your attention.</p>
-        <p class="ob-body">Everything you see is yours — move it, resize it, or turn it off. A few small things first, then the page is yours.</p>
+        <p class="ob-lead">Hi, friends :)</p>
+        <p class="ob-body">Thank you for downloading Newly. It turns your new tab into a clean, glassy page — a little less bloat, a little more calm.</p>
+        <p class="ob-body">Everything you see is yours — move it, resize it, or turn it off. Nothing is sent to some all-knowing AI (it is busy enough already), so the page is yours.</p>
       </section>
 
       <section class="ob-step" data-step="2" hidden>
@@ -3017,9 +3147,11 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
           </div>
           <div class="pos-row" style="margin-top:8px;margin-bottom:0;">
             <label>Speed</label>
-            <input type="range" id="ob-motion-speed" min="1" max="100" value="50">
-            <span id="ob-motion-speed-v">50%</span>
+            <input type="range" id="ob-motion-speed" min="1" max="100" value="60">
+            <span id="ob-motion-speed-v">60%</span>
           </div>
+          <label class="lbl" style="margin-top:10px;">Flow direction</label>
+          <div class="flowpad" id="ob-flow-seg"></div>
         </div>
         <div id="ob-vid-wrap" style="margin-top:10px;display:none;">
           <div class="ob-drop" id="ob-vdrop">
@@ -3106,6 +3238,11 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
     <div class="seg" id="calwin-source">
       <button class="seg-btn" data-src="device" type="button">This device</button>
       <button class="seg-btn" data-src="city" type="button">Weather city</button>
+    </div>
+    <div class="pos-row" style="margin-top:10px;margin-bottom:0;">
+      <label>Size</label>
+      <input type="range" id="calwin-size" min="8" max="28" step="1" value="9">
+      <span id="calwin-size-v">9px</span>
     </div>
     <p class="hint" id="calwin-hint" style="margin-top:8px;text-align:center;">January to December of the current year.</p>
   </div>

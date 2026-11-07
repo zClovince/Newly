@@ -1,11 +1,12 @@
 ============================================================
-  CARA INSTALL - Newly 2.0
+  CARA INSTALL & PAKAI
+  Newly 2.1
+  (Bahasa Indonesia)
 ============================================================
 
-Terima kasih sudah mau download! File ini menjelaskan cara 
-memasang ekstensi "Newly" di Chrome, Brave, Edge, browser
-berbasis Chromium lainnya, dan Firefox, dan juga
-cara mengaturnya.
+Terima kasih sudah mau pakai! File ini menjelaskan cara memasang
+ekstensi "Newly" di Chrome, Brave, Edge, browser
+berbasis Chromium lainnya, dan Firefox, plus cara mengaturnya.
 
 Penting: file ZIP TIDAK bisa langsung dipasang. Kamu harus
 mengextract (unzip) dulu foldernya, baru dimasukkan ke browser.

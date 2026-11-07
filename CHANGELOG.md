@@ -5,6 +5,30 @@ This file is included in every release ZIP, so the history travels with the exte
 
 ---
 
+## 2.1.0 — Silk Waves
+
+The Calm Gradient background is rebuilt from the ground up, and a handful of quiet fixes ride along.
+
+### The gradient
+
+- **Layered silk waves.** The Calm Gradient is now a live wallpaper: parallel ribbons tilted so they fall to the right, each a flat colour, with a soft shadow where it laps over the ribbon behind. Colours ramp from near-black at the back to pale cream at the front, and because the field is laid out in true screen space the whole ramp always spans the window, whatever its size.
+- **Flowing, not glitching.** The whole field is one SVG, built once and then slid exactly one wavelength along the ribbons on the compositor — a seamless loop from a single transform. No per-band desync, no crossing bands, no colour snap.
+- **A real speed control.** The drift-speed slider now spans a genuinely calm crawl to a clearly lively flow, instead of a narrow range that always felt slow.
+- **Eight directions.** The flow pad aims the drift: left and right glide continuously along the ribbons, the other six rock gently so a colour never snaps.
+- **Calmer scrims.** Sheets fade their backdrop blur in and out on open and close, instead of switching it on in one frame.
+
+### Also in this release
+
+- **Resizable calendar.** One shared calendar size now drives the Clock pane, the Widgets pane and the calendar window itself, so the whole calendar scales from one control.
+- **Smoother windows.** Settings and every widget window share one open/close animation, and all widgets animate together during a browser resize — opening a window no longer drops frames or flickers.
+- **Greeting auto-fit.** The greeting widget now sizes itself like the weather and quote cards.
+
+### Fixed
+
+- **No more washed-out gradient.** The previous calm-gradient field only spanned the colours it generated locally, so on some window sizes only the middle of the ramp was ever on screen. The screen-space rewrite keeps the full dark-to-light range visible at every size.
+
+---
+
 ## 2.0.0 — Liquid Glass
 
 Newly 1.0 was glassmorphism: frosted, translucent, pleasant. 2.0 is Liquid Glass — the material now bends what sits behind it, and every surface that floats over the page is cut from the same recipe.

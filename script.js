@@ -47,7 +47,7 @@ var K = {
   panelSize:'nt_panel_size', sizes:'nt_sizes',
   timeSource:'nt_time_source', calSize:'nt_cal_size',
   onboarded:'nt_onboarded',
-  motion:'nt_grad_motion', motionSpeed:'nt_grad_speed',
+  motion:'nt_grad_motion', motionSpeed:'nt_grad_speed', flow:'nt_grad_flow',
   glassStyle:'nt_glass_style', glassTintMode:'nt_glass_tint_mode'
 };
 
@@ -186,22 +186,253 @@ function detectBrowserDefault(){
   }catch(e){}
 }
 
-/* Apple-ish static gradients used whenever the video is off. All are dark and
-   desaturated on purpose, so white glass cards and text stay readable. */
+/* Apple-ish gradients used whenever the video is off. Each palette carries a
+   base wash plus a ramp of wave-band colours, dark at the back and light at
+   the front. The bands are what give the liquid lens real structure to bend. */
 var GRADIENTS = [
-  { name:'Nebula',   css:'linear-gradient(125deg,#241a44,#0d2438 32%,#3a1b3d 62%,#08182b)',
-    blob:'radial-gradient(46% 46% at 24% 30%, rgba(124,86,208,0.55), transparent 70%),radial-gradient(50% 50% at 78% 26%, rgba(52,110,196,0.45), transparent 72%),radial-gradient(54% 54% at 62% 80%, rgba(196,74,150,0.38), transparent 74%)' },
-  { name:'Midnight', css:'linear-gradient(125deg,#0b1026,#131a3a 40%,#1b1030 70%,#05070f)',
-    blob:'radial-gradient(50% 50% at 26% 28%, rgba(58,74,170,0.42), transparent 70%),radial-gradient(52% 52% at 76% 74%, rgba(96,68,168,0.34), transparent 72%),radial-gradient(46% 46% at 62% 32%, rgba(40,90,150,0.30), transparent 70%)' },
-  { name:'Aurora',   css:'linear-gradient(125deg,#06312e,#0b3a4a 35%,#123a56 65%,#04121f)',
-    blob:'radial-gradient(48% 48% at 24% 32%, rgba(28,150,132,0.48), transparent 70%),radial-gradient(52% 52% at 78% 30%, rgba(38,132,196,0.42), transparent 72%),radial-gradient(50% 50% at 60% 80%, rgba(30,170,150,0.34), transparent 72%)' },
-  { name:'Sunset',   css:'linear-gradient(125deg,#3a1630,#4a1c2e 35%,#2a1230 65%,#12081a)',
-    blob:'radial-gradient(48% 48% at 26% 30%, rgba(196,86,120,0.46), transparent 70%),radial-gradient(52% 52% at 78% 32%, rgba(214,120,72,0.40), transparent 72%),radial-gradient(50% 50% at 58% 80%, rgba(150,54,120,0.36), transparent 72%)' },
-  { name:'Ocean',    css:'linear-gradient(125deg,#0a2740,#0d3a52 40%,#123047 70%,#04121e)',
-    blob:'radial-gradient(48% 48% at 24% 30%, rgba(36,124,176,0.46), transparent 70%),radial-gradient(52% 52% at 78% 34%, rgba(28,158,168,0.38), transparent 72%),radial-gradient(50% 50% at 60% 80%, rgba(30,96,168,0.34), transparent 72%)' },
-  { name:'Graphite', css:'linear-gradient(125deg,#1a1a1f,#232329 40%,#141418 70%,#0a0a0d)',
-    blob:'radial-gradient(48% 48% at 26% 30%, rgba(150,152,170,0.20), transparent 70%),radial-gradient(52% 52% at 78% 34%, rgba(120,124,150,0.16), transparent 72%),radial-gradient(50% 50% at 60% 80%, rgba(170,172,190,0.14), transparent 72%)' }
+  { name:'Nebula',   css:'linear-gradient(125deg,#241a44,#0d2438 32%,#3a1b3d 62%,#08182b)', amp:56,
+    bands:['#070912','#0b0920','#0f0c26','#1a1340','#221850','#2a1c5e','#3f2a86','#5c44b0','#8f79d4'] },
+  { name:'Midnight', css:'linear-gradient(125deg,#0b1026,#131a3a 40%,#1b1030 70%,#05070f)', amp:42,
+    bands:['#03050c','#050a18','#070d24','#0c1638','#101c44','#122150','#1c2f72','#2b459c','#4a68c4'] },
+  { name:'Aurora',   css:'linear-gradient(125deg,#06312e,#0b3a4a 35%,#123a56 65%,#04121f)', amp:72,
+    bands:['#02110d','#031712','#041d18','#072b26','#0a3d36','#0f574a','#17786a','#2b9a80','#33b394'] },
+  { name:'Sunset',   css:'linear-gradient(125deg,#3a1630,#4a1c2e 35%,#2a1230 65%,#12081a)', amp:62,
+    bands:['#140812','#1c0918','#250b1f','#3d1230','#4a1636','#5a1a3c','#7d274a','#a63b56','#d1666b'] },
+  { name:'Ocean',    css:'linear-gradient(125deg,#0a2740,#0d3a52 40%,#123047 70%,#04121e)', amp:64,
+    bands:['#030f19','#041721','#061f2e','#0a3145','#0f4a5f','#176b82','#2196a2','#2fb0b0','#4cc6bd'] },
+  { name:'Graphite', css:'linear-gradient(125deg,#1a1a1f,#232329 40%,#141418 70%,#0a0a0d)', amp:34,
+    bands:['#08080a','#0c0c0f','#101013','#18181d','#232329','#33333c','#4a4a56','#5a5a68','#6c6c7a'] }
 ];
+
+/* ── the wave field ─────────────────────────────────────────────────────────
+   Layered silk ribbons, matched to the reference wallpaper: parallel bands
+   tilted down-right, each a flat colour, with a compact soft shadow where it
+   laps over the ribbon behind. Colours ramp from the dark back edge to the
+   pale front edge, and the field is measured in real screen space so the full
+   ramp always spans the window. Built once, then slid one wavelength along the
+   ribbon axis on the compositor, so the loop is seamless. */
+
+var WAVE_TILT_DEG       = 42;     /* ribbon direction, down-right from horizontal */
+var WAVE_CYCLES         = 2.75;   /* wave cycles along the ribbon axis across the window */
+var WAVE_A1             = 0.42;   /* fundamental amplitude, x band width */
+var WAVE_A2             = 0.07;   /* 2nd-harmonic amplitude, x band width */
+var WAVE_PH2            = 1.15;   /* 2nd-harmonic phase (rad) */
+var WAVE_SEGS           = 16;     /* cubic segments per wavelength (integer: keeps loop seamless) */
+var WAVE_TARGET_BW      = 200;    /* preferred band width in px (decides ribbon count, 6..9) */
+var WAVE_MIN_RIBBONS    = 6;
+var WAVE_MAX_RIBBONS    = 9;
+var WAVE_EDGE_BIAS      = 0.55;   /* where ribbon 0's edge sits, in band widths from the back edge */
+var WAVE_EXTRA_BACK     = 2;      /* extra ribbons behind the dark edge */
+var WAVE_EXTRA_FRONT    = 2;      /* extra ribbons past the light edge */
+var WAVE_SHADOW_LAYERS  = 10;
+var WAVE_SHADOW_REACH   = 0.18;   /* shadow depth, x band width */
+var WAVE_SHADOW_TOTAL   = 0.5;    /* peak shadow opacity at the edge */
+var WAVE_SHADOW_Q       = 1.6;    /* falloff exponent */
+var WAVE_SHADOW_BLACK   = 0.45;   /* how far the shadow colour is pulled toward black */
+var WAVE_STEP_FRAC      = 0.3;    /* --wave-step, x band width */
+var WAVE_DEFAULT_BANDS  = ['#0f1c24', '#002b40', '#034556', '#056a75', '#3da8a8', '#74c6c8', '#a9c0c4', '#cfd8d3', '#f4e4d8'];
+
+function waveClamp(v, lo, hi) {
+  return v < lo ? lo : (v > hi ? hi : v);
+}
+
+function waveHexToRgb(hex) {
+  var s = String(hex || '').replace('#', '');
+  if (s.length === 3) {
+    s = s.charAt(0) + s.charAt(0) + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2);
+  }
+  if (!/^[0-9a-fA-F]{6}$/.test(s)) { return [0, 0, 0]; }
+  return [parseInt(s.substr(0, 2), 16), parseInt(s.substr(2, 2), 16), parseInt(s.substr(4, 2), 16)];
+}
+
+function waveRgbToHex(c) {
+  var out = '#', i, h;
+  for (i = 0; i < 3; i++) {
+    h = Math.round(waveClamp(c[i], 0, 255)).toString(16);
+    if (h.length < 2) { h = '0' + h; }
+    out += h;
+  }
+  return out;
+}
+
+function waveMix(a, b, t) {
+  var ca = waveHexToRgb(a), cb = waveHexToRgb(b);
+  return waveRgbToHex([
+    ca[0] + (cb[0] - ca[0]) * t,
+    ca[1] + (cb[1] - ca[1]) * t,
+    ca[2] + (cb[2] - ca[2]) * t
+  ]);
+}
+
+/* colour of visible ribbon j (0..n-1), sampled along the dark->light ramp */
+function waveBandColor(bands, j, n) {
+  var pos = n > 1 ? j * (bands.length - 1) / (n - 1) : 0;
+  var lo = Math.floor(pos + 1e-9);
+  var hi = Math.min(bands.length - 1, lo + 1);
+  var f = pos - lo;
+  if (f < 1e-6 || hi === lo) { return bands[lo]; }
+  return waveMix(bands[lo], bands[hi], f);
+}
+
+/* Shadow stack. Layer m is the ribbon silhouette pushed back by s*D.
+   Equal opacity steps (total/n each) at positions following (1-s)^q, so the
+   contrast of every step is identical and the largest step is the minimum
+   possible for n layers. Per-layer alpha is corrected for "over" compositing. */
+function waveShadow(n, total, q) {
+  var out = [], m, norm, prev = 0, cum, a, s;
+  norm = 1 - Math.pow(0.5 / n, 1 / q);
+  for (m = 0; m < n; m++) {
+    s = (1 - Math.pow((m + 0.5) / n, 1 / q)) / norm;
+    cum = total * (m + 1) / n;
+    a = 1 - (1 - cum) / (1 - prev);
+    prev = cum;
+    out.push({ s: s, a: a });
+  }
+  return out;
+}
+
+function waveFmt(v) {
+  return (Math.round(v * 10) / 10).toString();
+}
+
+/* (t,u) -> screen "x y" */
+function waveXY(c, t, u) {
+  return waveFmt(c.cs * t - c.sn * u) + ' ' + waveFmt(c.sn * t + c.cs * u);
+}
+
+/* One filled region: wavy edge at u = edgeU + f(t) running along t, closed
+   far away at uFar. Cubic Hermite segments (exact under the rotation). */
+function waveBandPath(c, edgeU, uFar) {
+  var n = c.i1 - c.i0, h3 = c.h / 3, i, ta, tb, t0, t1, d;
+  t0 = c.i0 * c.h;
+  t1 = c.i1 * c.h;
+  d = 'M' + waveXY(c, t0, edgeU + c.ft[0]);
+  for (i = 0; i < n; i++) {
+    ta = (c.i0 + i) * c.h;
+    tb = ta + c.h;
+    d += 'C' + waveXY(c, ta + h3, edgeU + c.ft[i] + c.fp[i] * h3) +
+         ' ' + waveXY(c, tb - h3, edgeU + c.ft[i + 1] - c.fp[i + 1] * h3) +
+         ' ' + waveXY(c, tb, edgeU + c.ft[i + 1]);
+  }
+  d += 'L' + waveXY(c, t1, uFar) + 'L' + waveXY(c, t0, uFar) + 'Z';
+  return d;
+}
+
+function buildWaveSvg(g, W, H) {
+  var bands, N, i, k, m, c, rad, cs, sn, xs, ys, t, u;
+  var tmin, tmax, umin, umax, T, L, bw, lam, h, w, ph, A1, A2, D, uFar, uEdge, uBase;
+  var shade, layers, parts, d, dx, dy, st, kFirst, kLast, col, t0, t1;
+
+  W = +W; H = +H;
+  if (!(W > 0)) { W = 1920; }
+  if (!(H > 0)) { H = 1080; }
+
+  bands = (g && g.bands && g.bands.length) ? g.bands : WAVE_DEFAULT_BANDS;
+
+  rad = WAVE_TILT_DEG * Math.PI / 180;
+  cs = Math.cos(rad);
+  sn = Math.sin(rad);
+
+  /* extents of the screen in the rotated basis (t along ribbon, u across, u grows toward lower-left) */
+  xs = [0, W, 0, W];
+  ys = [0, 0, H, H];
+  tmin = Infinity; tmax = -Infinity; umin = Infinity; umax = -Infinity;
+  for (i = 0; i < 4; i++) {
+    t = xs[i] * cs + ys[i] * sn;
+    u = -xs[i] * sn + ys[i] * cs;
+    if (t < tmin) { tmin = t; }
+    if (t > tmax) { tmax = t; }
+    if (u < umin) { umin = u; }
+    if (u > umax) { umax = u; }
+  }
+  T = tmax - tmin;
+  L = umax - umin;
+
+  N = waveClamp(Math.round(L / WAVE_TARGET_BW), WAVE_MIN_RIBBONS, WAVE_MAX_RIBBONS);
+  bw = L / N;                           /* band width: whole ramp spans the viewport */
+  lam = T / WAVE_CYCLES;                /* one wavelength along t */
+  h = lam / WAVE_SEGS;
+  A1 = WAVE_A1 * bw;
+  A2 = WAVE_A2 * bw;
+  w = 2 * Math.PI / lam;
+  D = WAVE_SHADOW_REACH * bw;
+
+  c = { cs: cs, sn: sn, h: h, ft: [], fp: [] };
+  c.i0 = Math.floor((tmin - lam - 2 * h) / h);
+  c.i1 = Math.ceil((tmax + lam + 2 * h) / h);
+  for (i = 0; i <= c.i1 - c.i0; i++) {
+    ph = w * ((c.i0 + i) * h);
+    c.ft[i] = A1 * Math.sin(ph) + A2 * Math.sin(2 * ph + WAVE_PH2);
+    c.fp[i] = A1 * w * Math.cos(ph) + 2 * A2 * w * Math.cos(2 * ph + WAVE_PH2);
+  }
+
+  uFar = umax + 3 * bw;
+  uBase = umin - 4 * bw;
+  shade = waveMix(bands[0], '#000000', WAVE_SHADOW_BLACK);
+  layers = waveShadow(WAVE_SHADOW_LAYERS, WAVE_SHADOW_TOTAL, WAVE_SHADOW_Q);
+
+  parts = [];
+  parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ' +
+    W + ' ' + H + '" preserveAspectRatio="none" style="display:block"><g class="wave-flow">');
+
+  /* backstop slab: nothing can show through behind the first ribbon */
+  t0 = c.i0 * h;
+  t1 = c.i1 * h;
+  parts.push('<path fill="' + waveBandColor(bands, 0, N) + '" d="M' + waveXY(c, t0, uBase) +
+    'L' + waveXY(c, t1, uBase) + 'L' + waveXY(c, t1, uFar) + 'L' + waveXY(c, t0, uFar) + 'Z"/>');
+
+  kFirst = -WAVE_EXTRA_BACK;
+  kLast = N - 1 + WAVE_EXTRA_FRONT;
+  for (k = kFirst; k <= kLast; k++) {
+    uEdge = umin + (k + WAVE_EDGE_BIAS) * bw;
+
+    /* shadow cast by ribbon k onto the ribbon behind it (only where it can be seen) */
+    if (k >= 0 && k <= N) {
+      for (m = 0; m < layers.length; m++) {
+        d = waveBandPath(c, uEdge - layers[m].s * D, uFar);
+        parts.push('<path fill="' + shade + '" fill-opacity="' + layers[m].a.toFixed(4) + '" d="' + d + '"/>');
+      }
+    }
+
+    col = waveBandColor(bands, waveClamp(k, 0, N - 1), N);
+    parts.push('<path fill="' + col + '" d="' + waveBandPath(c, uEdge, uFar) + '"/>');
+  }
+
+  parts.push('</g></svg>');
+
+  /* one wavelength along t, expressed as a screen vector */
+  dx = lam * cs;
+  dy = lam * sn;
+  if (typeof document !== 'undefined' && document.documentElement) {
+    st = document.documentElement.style;
+    st.setProperty('--wave-dx', dx.toFixed(2) + 'px');
+    st.setProperty('--wave-dy', dy.toFixed(2) + 'px');
+    st.setProperty('--wave-step', (bw * WAVE_STEP_FRAC).toFixed(2) + 'px');
+  }
+
+  return parts.join('');
+}
+
+function waveSize(){
+  var fb = $('fallback-bg');
+  var r = fb ? fb.getBoundingClientRect() : null;
+  var W = (r && r.width)  || window.innerWidth  || 1280;
+  var H = (r && r.height) || window.innerHeight || 720;
+  return { w: Math.max(360, Math.round(W)), h: Math.max(280, Math.round(H)) };
+}
+function applyWave(i){
+  var fb = $('fallback-bg');
+  if(!fb) return;
+  var g = GRADIENTS[i] || GRADIENTS[0];
+  var host = $('wave-bg');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'wave-bg';
+    fb.insertBefore(host, fb.firstChild);
+  }
+  var s = waveSize();
+  host.innerHTML = buildWaveSvg(g, s.w, s.h);
+}
 
 function gradientIndex(){
   var i = parseInt(gs(K.gradient),10);
@@ -213,7 +444,7 @@ function applyGradient(i){
   var g = GRADIENTS[i] || GRADIENTS[0];
   var root = document.documentElement.style;
   root.setProperty('--grad-bg', g.css);
-  root.setProperty('--grad-blob', g.blob || 'none');
+  applyWave(i);
   /* adaptive glass reads its tint from the scene, so a palette change is a
      tint change — re-derive it quietly on the next frame */
   if(glassTintMode() === 'adaptive') queueGlass();
@@ -224,18 +455,58 @@ function motionMode(){
   var m = gs(K.motion);
   return (m === 'still' || m === 'flow') ? m : 'slow';
 }
-/* 1–100, left slow, right fast. 50 is the calm default set earlier. */
+/* 1–100, left slow, right fast. 60 gives a fresh install a drift you can
+   actually see, while still reading as calm. */
 function motionSpeed(){
   var s = parseInt(gs(K.motionSpeed),10);
-  if(isNaN(s)) s = 50;
+  if(isNaN(s)) s = 60;
   return Math.max(1, Math.min(100, s));
 }
-/* the slow-mode cycle in seconds for the current speed; Flow rides at 0.45x */
+/* the slow-mode cycle in seconds for the current speed. A shorter cycle is a
+   faster drift: one full wave-slide, so 100% sweeps the field in a few
+   seconds and even the calm default stays clearly alive. Flow rides at 0.45x
+   this, so Flowing is always the livelier one. */
 function motionDuration(){
-  return 40 * Math.pow(2, (50 - motionSpeed()) / 38);
+  return 5 * Math.pow(20, (100 - motionSpeed()) / 99);
+}
+/* where the bands flow. The arrow points the way the waves travel. */
+var FLOWS = ['tl','ttb','tr','rtl','ltr','bl','btt','br'];
+var FLOW_ARROWS = { tl:'↖', ttb:'↓', tr:'↗', rtl:'←', ltr:'→', bl:'↙', btt:'↑', br:'↘' };
+var FLOW_TITLES = { tl:'Top-left', ttb:'Top to bottom', tr:'Top-right', rtl:'Right to left',
+                    ltr:'Left to right', bl:'Bottom-left', btt:'Bottom to top', br:'Bottom-right' };
+function flowDir(){
+  var f = gs(K.flow);
+  return (FLOWS.indexOf(f) >= 0) ? f : 'ltr';
+}
+function paintFlowPad(hostId){
+  var host = $(hostId);
+  if(!host) return;
+  var cur = flowDir();
+  Array.prototype.forEach.call(host.querySelectorAll('.seg-btn'), function(b){
+    b.classList.toggle('on', b.getAttribute('data-flow') === cur);
+  });
+}
+function buildFlowPad(hostId, onPick){
+  var host = $(hostId);
+  if(!host || host._built) return;
+  host._built = true;
+  ['tl','ttb','tr','rtl','','ltr','bl','btt','br'].forEach(function(f){
+    if(!f){ var s = document.createElement('span'); s.className = 'flow-spacer'; host.appendChild(s); return; }
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'seg-btn';
+    b.setAttribute('data-flow', f);
+    b.setAttribute('aria-label', 'Flow ' + FLOW_TITLES[f]);
+    b.title = FLOW_TITLES[f];
+    b.textContent = FLOW_ARROWS[f];
+    b.onclick = function(){ onPick(f); paintFlowPad(hostId); };
+    host.appendChild(b);
+  });
+  paintFlowPad(hostId);
 }
 function applyMotion(){
   document.body.setAttribute('data-motion', motionMode());
+  document.documentElement.setAttribute('data-flow', flowDir());
   document.documentElement.style.setProperty('--grad-dur', motionDuration().toFixed(1) + 's');
   var seg = $('motion-seg');
   if(seg){
@@ -243,6 +514,7 @@ function applyMotion(){
       b.classList.toggle('on', b.getAttribute('data-motion') === motionMode());
     });
   }
+  paintFlowPad('flow-seg');
   var sp = motionSpeed();
   var s1 = $('imotionspeed'), s1v = $('imotionspeed-v');
   if(s1) s1.value = sp;
@@ -469,92 +741,65 @@ var LOCAL_QUOTES = {
 
 /* ══════════════════════════════════════════
    ANIMATION STYLE ENGINE
+   One style drives every surface: the settings sheet (#panel), the widget
+   windows (.win-panel) and the dimmer behind both. Every style fades through
+   opacity — which is both the 1.0 blur-fade look *and* the cheap path, because
+   a panel below full opacity skips its backdrop sampling, so the glass is only
+   re-rasterised once, when the fade lands. Animating a full-strength transform
+   instead would re-sample the lens on every frame; this is what fixes the fps
+   dip when a widget opens.
 ══════════════════════════════════════════ */
 function applyAnimStyle(id){
   var style = $('anim-vars');
   if(!style){ style = document.createElement('style'); style.id = 'anim-vars'; document.head.appendChild(style); }
-  var css = '';
-  if(id === 'spring' || !id){
-    css = `
-      #overlay{transition:opacity 0.28s ease;}
-      #panel{transition:transform 0.38s cubic-bezier(0.34,1.30,0.64,1),opacity 0.28s ease;}
-      #overlay.open-anim #panel{transform:scale(1) translateY(0);opacity:1;}
-      .pane.on{animation:pane-in 0.26s cubic-bezier(0.34,1.30,0.64,1) forwards;}
-      @keyframes pane-in{from{opacity:0;transform:translateY(10px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
-      .tbtn{transition:background 0.18s,color 0.18s,transform 0.18s;}
-      .tbtn:hover{transform:scale(1.06);}
-      .tbtn.on{transform:scale(1.04);}
-    `;
-  } else if(id === 'fade'){
-    css = `
-      #overlay{transition:opacity 0.35s ease;}
-      #panel{transition:opacity 0.35s ease;transform:none!important;}
-      #overlay.open-anim #panel{opacity:1;}
-      .pane.on{animation:pane-fade 0.30s ease forwards;}
-      @keyframes pane-fade{from{opacity:0;}to{opacity:1;}}
-      .tbtn{transition:background 0.25s,color 0.25s;}
-    `;
-  } else if(id === 'slide'){
-    css = `
-      #overlay{transition:opacity 0.25s ease;}
-      #panel{transition:transform 0.32s cubic-bezier(0.25,1,0.5,1),opacity 0.28s ease;transform:translateY(32px)!important;opacity:0;}
-      #overlay.open-anim #panel{transform:translateY(0)!important;opacity:1;}
-      .pane.on{animation:pane-slide 0.26s cubic-bezier(0.25,1,0.5,1) forwards;}
-      @keyframes pane-slide{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}
-    `;
-  } else if(id === 'zoom'){
-    css = `
-      #overlay{transition:opacity 0.22s ease;}
-      #panel{transition:transform 0.28s cubic-bezier(0.34,1.20,0.64,1),opacity 0.22s ease;transform:scale(0.80)!important;opacity:0;}
-      #overlay.open-anim #panel{transform:scale(1)!important;opacity:1;}
-      .pane.on{animation:pane-zoom 0.22s cubic-bezier(0.34,1.20,0.64,1) forwards;}
-      @keyframes pane-zoom{from{opacity:0;transform:scale(0.90);}to{opacity:1;transform:scale(1);}}
-    `;
-  } else if(id === 'blur'){
-    css = `
-      #overlay{transition:opacity 0.30s ease;}
-      #panel{transition:filter 0.34s ease,opacity 0.30s ease,transform 0.30s ease;filter:blur(16px)!important;opacity:0;transform:scale(0.96)!important;}
-      #overlay.open-anim #panel{filter:blur(0)!important;opacity:1;transform:scale(1)!important;}
-      .pane.on{animation:pane-blur 0.30s ease forwards;}
-      @keyframes pane-blur{from{opacity:0;filter:blur(8px);}to{opacity:1;filter:blur(0);}}
-    `;
-  } else if(id === 'drift'){
-    css = `
-      #overlay{transition:opacity 0.32s ease;}
-      #panel{transition:transform 0.42s cubic-bezier(0.22,0.61,0.36,1),opacity 0.32s ease;transform:translateY(18px) scale(0.985)!important;opacity:0;}
-      #overlay.open-anim #panel{transform:translateY(0) scale(1)!important;opacity:1;}
-      .pane.on{animation:pane-drift 0.34s cubic-bezier(0.22,0.61,0.36,1) forwards;}
-      @keyframes pane-drift{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
-      .tbtn{transition:background 0.22s,color 0.22s,transform 0.22s;}
-      .tbtn:hover{transform:translateY(-1px);}
-    `;
-  } else if(id === 'glide'){
-    css = `
-      #overlay{transition:opacity 0.26s ease;}
-      #panel{transition:transform 0.36s cubic-bezier(0.25,1,0.5,1),opacity 0.26s ease;transform:translateX(30px)!important;opacity:0;}
-      #overlay.open-anim #panel{transform:translateX(0)!important;opacity:1;}
-      .pane.on{animation:pane-glide 0.30s cubic-bezier(0.25,1,0.5,1) forwards;}
-      @keyframes pane-glide{from{opacity:0;transform:translateX(-14px);}to{opacity:1;transform:translateX(0);}}
-      .tbtn{transition:background 0.22s,color 0.22s,transform 0.22s;}
-      .tbtn:hover{transform:translateX(1px);}
-    `;
-  } else if(id === 'unfold'){
-    css = `
-      #overlay{transition:opacity 0.28s ease;}
-      #panel{transition:transform 0.38s cubic-bezier(0.22,0.61,0.36,1),opacity 0.28s ease;transform-origin:top center;transform:perspective(900px) rotateX(-9deg) translateY(-10px) scale(0.97)!important;opacity:0;}
-      #overlay.open-anim #panel{transform:perspective(900px) rotateX(0deg) translateY(0) scale(1)!important;opacity:1;}
-      .pane.on{animation:pane-unfold 0.30s cubic-bezier(0.22,0.61,0.36,1) forwards;transform-origin:top center;}
-      @keyframes pane-unfold{from{opacity:0;transform:perspective(900px) rotateX(-7deg) translateY(-8px);}to{opacity:1;transform:perspective(900px) rotateX(0) translateY(0);}}
-      .tbtn{transition:background 0.22s,color 0.22s,transform 0.22s;}
-      .tbtn:hover{transform:translateY(-1px);}
-    `;
-  } else if(id === 'none'){
-    css = `
-      #overlay{transition:none;}
-      #panel{transition:none;transform:none!important;opacity:1!important;filter:none!important;}
-      #overlay.open-anim #panel{opacity:1!important;}
-      .pane.on{animation:none;}
-    `;
+  var SEL_C = '#overlay #panel,.win-modal .win-panel,.prayer-modal .prayer-panel';
+  var SEL_O = '#overlay.open-anim #panel,.win-modal.in .win-panel,.prayer-modal.in .prayer-panel';
+  var SCRIM = '#overlay,.win-modal,.prayer-modal{transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;}';
+
+  /* closed transform, duration, easing, closed blur (px), pane anim, keyframes, extra */
+  var S = {
+    spring:{ closed:'scale(0.94) translateY(14px)', dur:'0.34s', ease:'cubic-bezier(0.34,1.30,0.64,1)', blur:10,
+      pane:'.pane.on{animation:pane-in 0.26s cubic-bezier(0.34,1.30,0.64,1) forwards;}',
+      kf:'@keyframes pane-in{from{opacity:0;transform:translateY(10px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}',
+      extra:'.tbtn{transition:background 0.18s,color 0.18s,transform 0.18s;}.tbtn:hover{transform:scale(1.06);}.tbtn.on{transform:scale(1.04);}' },
+    fade:{ closed:'none', dur:'0.30s', ease:'ease', blur:12,
+      pane:'.pane.on{animation:pane-fade 0.30s ease forwards;}',
+      kf:'@keyframes pane-fade{from{opacity:0;}to{opacity:1;}}',
+      extra:'.tbtn{transition:background 0.25s,color 0.25s;}' },
+    slide:{ closed:'translateY(30px)', dur:'0.30s', ease:'cubic-bezier(0.25,1,0.5,1)', blur:10,
+      pane:'.pane.on{animation:pane-slide 0.26s cubic-bezier(0.25,1,0.5,1) forwards;}',
+      kf:'@keyframes pane-slide{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}' },
+    zoom:{ closed:'scale(0.86)', dur:'0.28s', ease:'cubic-bezier(0.34,1.20,0.64,1)', blur:8,
+      pane:'.pane.on{animation:pane-zoom 0.22s cubic-bezier(0.34,1.20,0.64,1) forwards;}',
+      kf:'@keyframes pane-zoom{from{opacity:0;transform:scale(0.90);}to{opacity:1;transform:scale(1);}}' },
+    blur:{ closed:'none', dur:'0.32s', ease:'ease', blur:18,
+      pane:'.pane.on{animation:pane-blur 0.30s ease forwards;}',
+      kf:'@keyframes pane-blur{from{opacity:0;filter:blur(8px);}to{opacity:1;filter:blur(0);}}' },
+    drift:{ closed:'translateY(20px) scale(0.985)', dur:'0.34s', ease:'cubic-bezier(0.22,0.61,0.36,1)', blur:10,
+      pane:'.pane.on{animation:pane-drift 0.34s cubic-bezier(0.22,0.61,0.36,1) forwards;}',
+      kf:'@keyframes pane-drift{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}',
+      extra:'.tbtn{transition:background 0.22s,color 0.22s,transform 0.22s;}.tbtn:hover{transform:translateY(-1px);}' },
+    glide:{ closed:'translateX(28px)', dur:'0.32s', ease:'cubic-bezier(0.25,1,0.5,1)', blur:10,
+      pane:'.pane.on{animation:pane-glide 0.30s cubic-bezier(0.25,1,0.5,1) forwards;}',
+      kf:'@keyframes pane-glide{from{opacity:0;transform:translateX(-14px);}to{opacity:1;transform:translateX(0);}}',
+      extra:'.tbtn{transition:background 0.22s,color 0.22s,transform 0.22s;}.tbtn:hover{transform:translateX(1px);}' },
+    unfold:{ closed:'transform-origin:top center;transform:perspective(900px) rotateX(-9deg) translateY(-10px) scale(0.97)', dur:'0.34s', ease:'cubic-bezier(0.22,0.61,0.36,1)', blur:12,
+      pane:'.pane.on{animation:pane-unfold 0.30s cubic-bezier(0.22,0.61,0.36,1) forwards;transform-origin:top center;}',
+      kf:'@keyframes pane-unfold{from{opacity:0;transform:perspective(900px) rotateX(-7deg) translateY(-8px);}to{opacity:1;transform:perspective(900px) rotateX(0) translateY(0);}}',
+      extra:'.tbtn{transition:background 0.22s,color 0.22s,transform 0.22s;}.tbtn:hover{transform:translateY(-1px);}' }
+  };
+
+  var css;
+  if(id === 'none'){
+    css = '#overlay,.win-modal,.prayer-modal{transition:none;}' +
+          SEL_C + '{transition:none;transform:none;opacity:1;filter:none;}' +
+          '.pane.on{animation:none;}';
+  } else {
+    var s = S[id] || S.spring;
+    css = SCRIM +
+      SEL_C + '{transition:transform ' + s.dur + ' ' + s.ease + ',opacity ' + s.dur + ' ease,filter ' + s.dur + ' ease;transform:' + s.closed + ';opacity:0;filter:blur(' + s.blur + 'px);}' +
+      SEL_O + '{transform:none;opacity:1;filter:blur(0);}' +
+      (s.pane || '') + (s.kf || '') + (s.extra || '');
   }
   style.textContent = css;
 }
@@ -655,14 +900,21 @@ function glassTintMode(){
   var m = gs(K.glassTintMode);
   return (m === 'adaptive') ? 'adaptive' : 'manual';
 }
-/* the active palette's leading blob colour, lifted toward white so the glass
-   stays bright and readable — used when tint is set to Adaptive */
+/* a mid-light band colour from the active palette, lifted toward white so the
+   glass stays bright and readable — used when tint is set to Adaptive */
+function hexToRgb(h){
+  h = String(h || '').replace('#','');
+  if(h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  var n = parseInt(h, 16);
+  if(isNaN(n)) return [255,255,255];
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
 function paletteAccent(){
   var g = GRADIENTS[gradientIndex()] || GRADIENTS[0];
-  var m = (g && g.blob) ? g.blob.match(/rgba?\(([^)]+)\)/) : null;
-  var p = (m ? m[1] : '255,255,255').split(',');
-  var r = parseInt(p[0],10), gg = parseInt(p[1],10), b = parseInt(p[2],10);
-  if(isNaN(r)) r = 255; if(isNaN(gg)) gg = 255; if(isNaN(b)) b = 255;
+  var arr = (g && g.bands) || [];
+  var hex = arr.length ? arr[Math.min(arr.length - 1, Math.round(arr.length * 0.7))] : '#ffffff';
+  var p = hexToRgb(hex);
+  var r = p[0], gg = p[1], b = p[2];
   r  = Math.round(r  * 0.55 + 255 * 0.45);
   gg = Math.round(gg * 0.55 + 255 * 0.45);
   b  = Math.round(b  * 0.55 + 255 * 0.45);
@@ -718,9 +970,43 @@ function applyLensMap(){
   im.setAttribute('href', url);
 }
 /* Liquid Glass is the one heavy thing here. After it is switched on, watch the
-   real frame rate for a moment; if the device cannot hold a calm pace, quietly
-   fall back to Classic instead of grinding. One probe at a time. */
+   real frame rate for a moment. If the device cannot hold a calm pace, ask
+   before changing anything — a silent downgrade is never the answer. The same
+   question is throttled to once every five minutes, so a machine that is
+   simply busy once does not get nagged. One probe at a time. */
 var _glassProbe = false;
+var PERF_PROMPT_EVERY = 5 * 60 * 1000;
+var _perfPromptTimer = null;
+function perfPromptOpen(){
+  var p = $('perf-pop');
+  return !!(p && p.classList.contains('open'));
+}
+function showGlassPerfPrompt(){
+  if(glassStyle() !== 'liquid' || document.hidden || perfPromptOpen()) return;
+  /* never interrupt the first-run welcome with a performance question */
+  if(_openWin === 'welcome-modal') return;
+  var last = parseInt(gs('nt_perf_prompt'), 10) || 0;
+  if(last && (Date.now() - last) < PERF_PROMPT_EVERY) return;
+  var pop = $('perf-pop');
+  if(!pop) return;
+  ss('nt_perf_prompt', String(Date.now()));
+  pop.classList.add('open');
+  pop.setAttribute('aria-hidden','false');
+}
+function hideGlassPerfPrompt(){
+  var pop = $('perf-pop');
+  if(!pop) return;
+  pop.classList.remove('open');
+  pop.setAttribute('aria-hidden','true');
+}
+function scheduleGlassReprobe(){
+  if(_perfPromptTimer){ clearTimeout(_perfPromptTimer); _perfPromptTimer = null; }
+  if(glassStyle() !== 'liquid') return;
+  _perfPromptTimer = setTimeout(function(){
+    _perfPromptTimer = null;
+    if(!document.hidden) glassPerfProbe();
+  }, PERF_PROMPT_EVERY + 2000);
+}
 function glassPerfProbe(){
   if(_glassProbe || document.hidden) return;
   _glassProbe = true;
@@ -738,11 +1024,8 @@ function glassPerfProbe(){
       var fps = (frames - warmup) / ((now - start) / 1000);
       _glassProbe = false;
       if(fps < 32 && glassStyle() === 'liquid'){
-        ss(K.glassStyle, 'classic');
-        applyGlassSettings();
-        if(typeof noteToast === 'function'){
-          noteToast('Liquid Glass paused \u2014 it was asking a lot of this device.', true, true);
-        }
+        showGlassPerfPrompt();
+        scheduleGlassReprobe();
       }
     }
     requestAnimationFrame(tick);
@@ -750,6 +1033,22 @@ function glassPerfProbe(){
 }
 
 var _glassQueued = false;
+/* Firefox (and any engine that cannot use an SVG filter reference as a
+   backdrop-filter value) must not be handed the lens: the declaration is
+   syntactically valid, so the browser keeps it and then renders nothing,
+   leaving the glass with no blur at all. Detect it once and render the
+   frosted material instead, while the stored choice stays "Liquid". */
+var _lensOK = null;
+function lensSupported(){
+  if(_lensOK !== null) return _lensOK;
+  try{
+    _lensOK = !!(window.CSS && CSS.supports && (
+      CSS.supports('backdrop-filter', 'url(#lg-lens)') ||
+      CSS.supports('-webkit-backdrop-filter', 'url(#lg-lens)')
+    ));
+  }catch(e){ _lensOK = false; }
+  return _lensOK;
+}
 function applyGlassSettings(){
   var blur  = parseInt(gs(K.glassBlur)  || '2',10);
   var alpha = parseInt(gs(K.glassAlpha) || '21',10);
@@ -767,9 +1066,21 @@ function applyGlassSettings(){
      soft blur of its own, so text always has something calm to sit on. */
   root.setProperty('--glass-sheet-blur', Math.min(44, Math.max(18, blur)) + 'px');
   root.setProperty('--glass-scrim-blur', Math.min(16, Math.max(8, blur)) + 'px');
-  var liquid = glassStyle() === 'liquid';
+  var liquid = glassStyle() === 'liquid' && lensSupported();
   document.body.classList.toggle('glass-liquid', liquid);
   document.body.classList.toggle('glass-classic', !liquid);
+  document.body.classList.toggle('glass-lens-off', !lensSupported());
+  /* one quiet note, only when a "Liquid" choice cannot actually render */
+  if(!lensSupported() && glassStyle() === 'liquid' && !$('glass-lens-note')){
+    var segWrap = $('glass-style-seg');
+    if(segWrap && segWrap.parentNode){
+      var note = document.createElement('p');
+      note.className = 'hint';
+      note.id = 'glass-lens-note';
+      note.textContent = 'This browser cannot render the liquid lens, so the frosted glass is shown instead.';
+      segWrap.parentNode.insertBefore(note, segWrap.nextSibling);
+    }
+  }
   document.body.classList.toggle('glass-tint-adaptive', glassTintMode() === 'adaptive');
   var seg = $('glass-style-seg');
   if(seg){
@@ -784,6 +1095,10 @@ function applyGlassSettings(){
     });
   }
   if(liquid){ applyLensMap(); glassPerfProbe(); }
+  else {
+    hideGlassPerfPrompt();
+    if(_perfPromptTimer){ clearTimeout(_perfPromptTimer); _perfPromptTimer = null; }
+  }
   syncAllRangeFills();
 }
 function queueGlass(){
@@ -934,6 +1249,9 @@ function renderGreeting(){
   if(wrap) wrap.style.display = text ? '' : 'none';
   applyGreetingStyle();
   updateTabName();
+  /* the greeting grows or shrinks with the name and its style, the same way
+     the weather and quote cards re-fit their content */
+  scheduleRefit();
 }
 
 /* ══════════════════════════════════════════
@@ -1193,6 +1511,41 @@ function applyCalSize(){
   root.setProperty('--cal-pad-x', Math.round(px * 1.2) + 'px');
   root.setProperty('--cal-pad-y', Math.round(px * 1.0) + 'px');
   root.setProperty('--cal-radius', Math.round(px * 0.7) + 'px');
+  /* the calendar window (opened from the card) follows the same scale, so a
+     big monitor gets a big month — window and contents together */
+  var day = Math.max(12, Math.round(px * 1.15));
+  root.setProperty('--calwin-day-size', day + 'px');
+  root.setProperty('--calwin-w', Math.max(360, Math.round(px * 30)) + 'px');
+}
+/* one calendar size, three places to set it (clock pane, widgets pane and the
+   calendar window itself) — every copy stays in step */
+function calSizeValue(){
+  var v = parseInt(gs(K.calSize),10);
+  return (v > 0) ? v : 9;
+}
+function syncCalSizeUI(){
+  var v = calSizeValue();
+  [['icalsize','icalsize-v'],['icalsize-w','icalsize-w-v'],['calwin-size','calwin-size-v']].forEach(function(pair){
+    var el = $(pair[0]), lab = $(pair[1]);
+    if(el) el.value = v;
+    if(lab) lab.textContent = v + 'px';
+  });
+}
+function setCalSize(v){
+  v = parseInt(v,10);
+  if(!(v > 0)) return;
+  ss(K.calSize, String(v));
+  /* this option owns the whole card, so drop any hand-resized size that would
+     otherwise pin the old width */
+  var sizes = parseJSON(gs(K.sizes),{}) || {};
+  if(sizes.calendar){ delete sizes.calendar; ss(K.sizes, JSON.stringify(sizes)); }
+  var cel = $('calendar');
+  if(cel){ cel.style.width = ''; cel.style.height = ''; cel.style.removeProperty('--ws'); }
+  applyCalSize();
+  renderCalendar();
+  measureBases();
+  applySizes();
+  syncCalSizeUI();
 }
 
 function renderClock(){
@@ -2507,11 +2860,15 @@ function updateStatusNet(){
   var on = navigator.onLine;
   var c = navigator.connection || navigator.webkitConnection || navigator.mozConnection;
   var label = statusLabelText();
-  setText($('st-net-text'), label || (on ? 'Online' : 'Offline'));
+  /* a pending update is more important than a custom network name, but an
+     actual offline state is more important than both */
+  if(on && _updateAvailable) label = 'New Update is Available!';
+  else label = label || (on ? 'Online' : 'Offline');
+  setText($('st-net-text'), label);
   var dot = $('st-dot');
   if(dot){
     var rough = on && c && ((typeof c.rtt === 'number' && c.rtt > 250) || c.saveData || c.effectiveType === '2g' || c.effectiveType === 'slow-2g');
-    dot.className = 'st-dot ' + (!on ? 'off' : (rough ? 'warn' : 'on'));
+    dot.className = 'st-dot ' + (!on ? 'off' : ((_updateAvailable || rough) ? 'warn' : 'on'));
   }
   if(_statusOpen) setText($('sp-net'), netInfo());
 }
@@ -2549,6 +2906,7 @@ function refreshStatusPop(){
 var UPDATE_MANIFEST = 'https://raw.githubusercontent.com/zClovince/Newly/main/manifest.json';
 var _localVersion = '';
 var _updateBusy = false;
+var _updateAvailable = false;
 
 function cmpVersion(a, b){
   var A = String(a || '0').split('.'), B = String(b || '0').split('.');
@@ -2568,8 +2926,13 @@ function paintUpdate(remote, local){
   var out = $('sp-update');
   if(!out) return;
   out.classList.remove('new');
+  var has = !!(local && remote && cmpVersion(remote, local) > 0);
+  _updateAvailable = has;
+  var open = $('sp-update-open');
+  if(open) open.hidden = !has;
+  updateStatusNet();
   if(!local){ setText(out, '\u2014'); return; }
-  if(remote && cmpVersion(remote, local) > 0){
+  if(has){
     setText(out, remote + ' available');
     out.classList.add('new');
     out.title = 'A newer release exists on GitHub \u2014 github.com/zClovince/Newly/releases';
@@ -2737,8 +3100,14 @@ function initStatus(){
   var ub = $('sp-update-check');
   if(ub) ub.onclick = function(){ checkUpdates(true); };
 
-  /* show the build number straight away; the check itself happens when the
-     popover opens, or when you ask for it */
+  var uo = $('sp-update-open');
+  if(uo) uo.onclick = function(){
+    window.open('https://github.com/zClovince/Newly/releases', '_blank', 'noopener');
+  };
+
+  /* paint whatever we already know, and quietly look for a newer release on
+     every new tab. The twelve-hour cache keeps this from hammering GitHub. */
+  maybeAutoCheckUpdate();
   currentVersion().then(function(lv){
     var out = $('sp-update');
     if(out && out.textContent === '-') setText(out, lv);
@@ -3074,7 +3443,7 @@ function closePrayer(){
   _prayerCloseTimer = setTimeout(function(){
     modal.classList.remove('open');
     _prayerCloseTimer = null;
-  }, 300);
+  }, 360);
 }
 
 function initPrayer(){
@@ -3384,7 +3753,7 @@ function closePanel(){
     overlay.classList.remove('open');
     overlay.style.display = 'none';
     _closeTimer = null;
-  },300);
+  },360);
 }
 
 /* ══════════════════════════════════════════
@@ -3962,6 +4331,7 @@ function loadUI(){
     ias.value = csz;
     if(iasv) iasv.textContent = csz + 'px';
   }
+  syncCalSizeUI();
   var its = $('itimesource');
   if(its) its.value = gs(K.timeSource) || 'device';
 
@@ -4265,11 +4635,23 @@ startWeatherTimer();
    catches late layout work (fonts, scrollbars, zoom) that can still move a
    card by a pixel or two after the first frame. */
 var _resizeTimer = null;
+var _resizeClassTimer = null;
 window.addEventListener('resize',function(){
+  /* cards glide to their new spots during a window resize, matching the
+     search bar; the class is removed shortly after so dragging stays 1:1 */
+  document.body.classList.add('win-resizing');
+  if(_resizeClassTimer) clearTimeout(_resizeClassTimer);
+  _resizeClassTimer = setTimeout(function(){
+    _resizeClassTimer = null;
+    document.body.classList.remove('win-resizing');
+  }, 700);
   if(_resizeTimer) clearTimeout(_resizeTimer);
   _resizeTimer = setTimeout(function(){
     _resizeTimer = null;
     applySizes();
+    /* the wave field is measured in screen space, so re-lay it out for the
+       new window size (the palette then always spans the whole screen) */
+    applyWave(gradientIndex());
     /* widths are inline now, so re-measure on the next frame before placing */
     requestAnimationFrame(applyPositions);
     setTimeout(applyPositions, 260);
@@ -4861,6 +5243,11 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
       applyMotion();
     });
   }
+  buildFlowPad('flow-seg', function(f){
+    ss(K.flow, f);
+    applyMotion();
+    peekUpdate('Flow ' + (FLOW_TITLES[f] || f));
+  });
   var mspd = $('imotionspeed'), mspdv = $('imotionspeed-v');
   if(mspd){
     mspd.oninput = function(){
@@ -5055,6 +5442,35 @@ function noteToast(msg, plain, center){
   noteToast._t = setTimeout(function(){ t.classList.remove('on'); }, 2000);
 }
 
+/* performance prompt: keep Liquid, switch to the original blur, or dismiss.
+   Either way the question waits at least five minutes before asking again. */
+(function(){
+  var pop = $('perf-pop');
+  if(!pop) return;
+  function dismiss(){
+    hideGlassPerfPrompt();
+    scheduleGlassReprobe();
+  }
+  var keep = $('perf-pop-keep');
+  if(keep) keep.onclick = dismiss;
+  var close = $('perf-pop-close');
+  if(close) close.onclick = dismiss;
+  var sw = $('perf-pop-classic');
+  if(sw) sw.onclick = function(){
+    ss(K.glassStyle, 'classic');
+    if(_perfPromptTimer){ clearTimeout(_perfPromptTimer); _perfPromptTimer = null; }
+    applyGlassSettings();
+    hideGlassPerfPrompt();
+    noteToast('Original blur is on \u2014 switch back anytime in Display.', true, true);
+  };
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && pop.classList.contains('open')){
+      e.stopPropagation();
+      dismiss();
+    }
+  }, true);
+})();
+
 /* colour helpers for the custom glass tint */
 function tintToHex(t){
   var m = String(t || '').match(/rgba?\(([^)]+)\)/);
@@ -5097,7 +5513,7 @@ function closeWin(id, instant){
   if(instant){ m.classList.remove('open'); return; }
   setTimeout(function(){
     if(!m.classList.contains('in')) m.classList.remove('open');
-  }, 280);
+  }, 360);
 }
 
 /* ── first-run welcome ──
@@ -5134,6 +5550,7 @@ function openWelcome(){
     wall: 'gradient',
     grad: gradientIndex(),
     motion: motionMode(),
+    flow: flowDir(),
     glass: glassStyle(),
     tintMode: glassTintMode()
   };
@@ -5332,6 +5749,8 @@ function openWelcome(){
     if(step === 8){
       buildObSwatches();
       paintSeg('ob-motion','data-motion', choice.motion);
+      buildFlowPad('ob-flow-seg', function(f){ choice.flow = f; ss(K.flow, f); applyMotion(); });
+      paintFlowPad('ob-flow-seg');
       syncObWall();
     }
   }
@@ -5383,6 +5802,7 @@ function openWelcome(){
     ss(K.batterySaver, grad ? '1' : '0');
     ss(K.gradient, String(choice.grad));
     ss(K.motion, choice.motion);
+    ss(K.flow, choice.flow);
     applyGradient(choice.grad);
     applyMotion();
     applyWallModeUI();
@@ -5394,7 +5814,7 @@ function openWelcome(){
     m.classList.remove('in');
     m.setAttribute('aria-hidden','true');
     if(_openWin === 'welcome-modal') _openWin = null;
-    setTimeout(function(){ m.classList.remove('open'); }, 280);
+    setTimeout(function(){ m.classList.remove('open'); }, 360);
   }
   function finish(skipped){
     rememberName();
@@ -5706,6 +6126,7 @@ function openCalWin(){
   _calWinYear  = wallNow().year;
   extSyncTimeSource();
   renderCalWin(true);
+  syncCalSizeUI();
   openWin('calendar-modal');
 }
 (function(){
@@ -6267,25 +6688,20 @@ function closeEngineMenu(){
 
 /* ── settings extras: calendar size, time source, custom tint ── */
 (function(){
-  var ias = $('icalsize'), iasv = $('icalsize-v');
-  if(ias) ias.oninput = function(){
-    var v = parseInt(ias.value,10);
-    if(!(v > 0)) return;
-    ss(K.calSize, String(v));
-    if(iasv) iasv.textContent = v + 'px';
-    /* this option owns the whole card, so drop any hand-resized size that
-       would otherwise pin the old width */
-    var sizes = parseJSON(gs(K.sizes),{}) || {};
-    if(sizes.calendar){ delete sizes.calendar; ss(K.sizes, JSON.stringify(sizes)); }
-    var cel = $('calendar');
-    if(cel){ cel.style.width = ''; cel.style.height = ''; cel.style.removeProperty('--ws'); }
-    applyCalSize();
-    renderCalendar();
-    measureBases();
-    applySizes();
-    peekUpdate('Calendar size ' + v + 'px');
-  };
-  wirePeek(ias, function(){ return 'Calendar size ' + ias.value + 'px'; });
+  function bindCalSize(id, modalId){
+    var el = $(id);
+    if(!el) return;
+    el.oninput = function(){
+      setCalSize(el.value);
+      peekUpdate('Calendar size ' + el.value + 'px');
+    };
+    if(modalId) wireWinPeek(el, modalId, function(){ return 'Calendar size ' + el.value + 'px'; });
+    else wirePeek(el, function(){ return 'Calendar size ' + el.value + 'px'; });
+  }
+  bindCalSize('icalsize');
+  bindCalSize('icalsize-w');
+  bindCalSize('calwin-size', 'calendar-modal');
+  syncCalSizeUI();
 
   var ics = $('iclocktime');
   wirePeek(ics, function(){ return 'Clock size ' + ics.value + 'px'; });

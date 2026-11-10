@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Newly",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Newly \u2014 a calm Liquid Glass new tab page with weather, clock, shortcuts, quotes and a wallpaper you choose. Works in Chrome, Brave, Edge and Firefox.",
   "permissions": [],
   "host_permissions": [
@@ -9,7 +9,10 @@
     "https://*.gstatic.com/*",
     "https://upload.wikimedia.org/*",
     "https://brave.com/*",
-    "https://api.aladhan.com/*"
+    "https://api.aladhan.com/*",
+    "https://query1.finance.yahoo.com/*",
+    "https://date.nager.at/*",
+    "https://api.bmkg.go.id/*"
   ],
   "chrome_url_overrides": {
     "newtab": "newtab.html"

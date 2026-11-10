@@ -1,6 +1,6 @@
 ============================================================
   CARA INSTALL & PAKAI
-  Newly 2.1
+  Newly 2.2
   (Bahasa Indonesia)
 ============================================================
 
@@ -208,7 +208,7 @@ Tab Wallpaper
     dan bagian "Video view" dengan slider Zoom (100-250%),
     geser kiri/kanan (Left) dan atas/bawah (Up), plus
     "Reset video view".
-  - Bagian "Gradient colours" berisi enam warna (Nebula,
+  - Bagian "Gradient colours" berisi enam warna (Reze,
     Midnight, Aurora, Sunset, Ocean, Graphite). Gradien juga
     dipakai kalau belum ada video atau videonya tidak bisa
     diputar.

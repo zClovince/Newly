@@ -5,17 +5,18 @@ This file is included in every release ZIP, so the history travels with the exte
 
 ---
 
-## 2.1.0 — Silk Waves
+### What's new in 2.2 — Polish
 
-The Calm Gradient background is rebuilt from the ground up, and a handful of quiet fixes ride along.
+- **Liquid Glass polish** — every card, panel and popup now reflects the scene at all four edges (perhaps will improve it later if found new implemantation)
+- **Weather (BMKG)** —  Weather now fetched from BMKG if Indonesian City is placed,Open-Mateo if the api fail/non Indonesian city was typed.
+- **Stocks/Crypto** — New Stocks / Cyrptocurrency Widget with Realtime Update, fully customizable, Fetched from Yahoo!
+- **Minor Improvement** — Honestly, i'm too lazy to explain it but few re-wording for few feature so it match the whole feature like "Calm Wave" instead old "Calm Flow" 
+- **Fix** — Few polishment to upgrade performance
+---
 
-### The gradient
+### What's new in 2.1 — Silk Waves
 
-- **Layered silk waves.** The Calm Gradient is now a live wallpaper: parallel ribbons tilted so they fall to the right, each a flat colour, with a soft shadow where it laps over the ribbon behind. Colours ramp from near-black at the back to pale cream at the front, and because the field is laid out in true screen space the whole ramp always spans the window, whatever its size.
-- **Flowing, not glitching.** The whole field is one SVG, built once and then slid exactly one wavelength along the ribbons on the compositor — a seamless loop from a single transform. No per-band desync, no crossing bands, no colour snap.
-- **A real speed control.** The drift-speed slider now spans a genuinely calm crawl to a clearly lively flow, instead of a narrow range that always felt slow.
-- **Eight directions.** The flow pad aims the drift: left and right glide continuously along the ribbons, the other six rock gently so a colour never snaps.
-- **Calmer scrims.** Sheets fade their backdrop blur in and out on open and close, instead of switching it on in one frame.
+- **Layered silk-wave gradient** — the Calm Gradient (now is Calm Flow in 2.2) is now a live wallpaper of parallel ribbons tilted to fall from the upper-left to the lower-right, each a flat colour with a soft shadow where it laps over the ribbon behind. Colours ramp from near-black at the back to pale cream at the front, and the whole ramp always spans the window, whatever its size.
 
 ### Also in this release
 
@@ -69,7 +70,7 @@ Newly is a calm, glassy new tab page. Everything rests on one screen, and you de
 ### The look
 
 - **Glassmorphism, everywhere.** Every card, panel, button and popup is frosted glass — a soft blur, a quiet lift on hover, and springy little animations, in the spirit of Apple's iOS and macOS. (2.0 replaces this with the real Liquid Glass lens.) The blur, tint and thickness are yours to soften or deepen whenever you like.
-- **Two ways to dress the background.** Settle on **Calm Gradient** — a still, soft colour scheme (Nebula, Midnight, Aurora, Sunset, Ocean or Graphite) that asks a little less of your battery — or let **Video Wallpaper** play your own clip quietly behind the glass, with gentle zoom and pan. New tabs open on the gradient, so you are never met with a black screen.
+- **Two ways to dress the background.** Settle on **Calm Gradient** — a still, soft colour scheme (Reze, Midnight, Aurora, Sunset, Ocean or Graphite) that asks a little less of your battery — or let **Video Wallpaper** play your own clip quietly behind the glass, with gentle zoom and pan. New tabs open on the gradient, so you are never met with a black screen.
 
 ### The widgets
 
@@ -137,7 +138,7 @@ Earlier releases, from when this project was called Custom New Tab, follow below
 - **Thin scrollbars everywhere**: Firefox has no `::-webkit-scrollbar`, so a `scrollbar-width` / `scrollbar-color` fallback now keeps the settings, prayer and changelog lists looking the same instead of showing chunky system bars.
 - **Connection test works without permissions**: the Google ping now uses an opaque `no-cors` request. Firefox MV3 does not auto-grant host permissions, so the old CORS check could fail even with a working connection; the new one only measures whether the network answers.
 - **Wallpaper chooser**: the Video pane now opens with two simple choices — **Calm Gradient** or **Video Wallpaper** — and only the settings for the chosen one are shown. No battery reading is involved (that API is a placeholder on Chromium and missing on Firefox), so it always works. The gradient quietly asks a little less of your battery, which is all the old toggle ever needed to mean. **Pause wallpaper on hidden tab** stays in **Widgets → Performance** and stops the video reliably (it checks both `document.hidden` and `visibilityState`, and removes the surface from the paint tree while stopped).
-- **Gradient picker in Video**: the static fallback moved out of the Widgets performance section and into **Video → Gradient colours**, with six Apple-style dark schemes (Nebula, Midnight, Aurora, Sunset, Ocean, Graphite). The gradient is also used when no video is set or the browser cannot play the chosen file.
+- **Gradient picker in Video**: the static fallback moved out of the Widgets performance section and into **Video → Gradient colours**, with six Apple-style dark schemes (Reze, Midnight, Aurora, Sunset, Ocean, Graphite). The gradient is also used when no video is set or the browser cannot play the chosen file.
 - **First run starts on the gradient**: a brand-new profile opens to a finished gradient instead of a black rectangle waiting for a video. Existing profiles keep whatever they had, so nobody's wallpaper changes underneath them.
 - **Video codec fallback**: if the browser cannot decode the chosen wallpaper (Firefox uses the operating system's decoder), the page falls back to the chosen gradient instead of showing a black rectangle, and returns to video as soon as a playable file is loaded. With no video set, the gradient is shown instead of a flat black page.
 - **Left / Top sliders stop fighting**: the two position sliders for a widget now read the widget's real on-screen spot and mirror it into both rows, so moving Left updates Top's value to match instead of resetting it, and vice versa.

@@ -34,6 +34,10 @@ var K = {
   showShortcuts:'nt_show_shortcuts', showWeather:'nt_show_weather', showQuote:'nt_show_quote',
   showStatus:'nt_show_status', statusLabel:'nt_status_label',
   showCalendar:'nt_show_calendar', showPrayer:'nt_show_prayer', prayerCache:'nt_prayer_cache',
+  showHolidays:'nt_show_holidays', holidayCountry:'nt_holiday_country', holidayCache:'nt_holiday_cache',
+  showStocks:'nt_show_stocks', stocksList:'nt_stocks_list', stocksCache:'nt_stocks_cache', stocksEvery:'nt_stocks_every',
+  stocksMarket:'nt_stocks_market', cryptoList:'nt_crypto_list',
+  stocksCurrency:'nt_stocks_currency', fxCache:'nt_fx_cache',
   prayerRemind:'nt_prayer_remind', prayerNotified:'nt_prayer_notified',
   prayerSound:'nt_prayer_sound',
   weatherCity:'nt_weather_city', weatherGeo:'nt_weather_geo',
@@ -47,8 +51,12 @@ var K = {
   panelSize:'nt_panel_size', sizes:'nt_sizes',
   timeSource:'nt_time_source', calSize:'nt_cal_size',
   onboarded:'nt_onboarded',
-  motion:'nt_grad_motion', motionSpeed:'nt_grad_speed', flow:'nt_grad_flow',
-  glassStyle:'nt_glass_style', glassTintMode:'nt_glass_tint_mode'
+  motion:'nt_grad_motion', motionSpeed:'nt_grad_speed', flow:'nt_grad_flow', waveDir:'nt_wave_dir',
+  waveZoom:'nt_wave_zoom', waveX:'nt_wave_x', waveY:'nt_wave_y',
+  glassStyle:'nt_glass_style', glassTintMode:'nt_glass_tint_mode',
+  lensCustom:'nt_lens_custom',
+  lensPeak:'nt_lens_peak', lensEdge:'nt_lens_edge', lensSpread:'nt_lens_spread',
+  lensZoom:'nt_lens_zoom'
 };
 
 /* in-memory mirror: the clock used to hit localStorage 4x per second */
@@ -190,7 +198,7 @@ function detectBrowserDefault(){
    base wash plus a ramp of wave-band colours, dark at the back and light at
    the front. The bands are what give the liquid lens real structure to bend. */
 var GRADIENTS = [
-  { name:'Nebula',   css:'linear-gradient(125deg,#241a44,#0d2438 32%,#3a1b3d 62%,#08182b)', amp:56,
+  { name:'Reze',     css:'linear-gradient(125deg,#241a44,#0d2438 32%,#3a1b3d 62%,#08182b)', amp:56,
     bands:['#070912','#0b0920','#0f0c26','#1a1340','#221850','#2a1c5e','#3f2a86','#5c44b0','#8f79d4'] },
   { name:'Midnight', css:'linear-gradient(125deg,#0b1026,#131a3a 40%,#1b1030 70%,#05070f)', amp:42,
     bands:['#03050c','#050a18','#070d24','#0c1638','#101c44','#122150','#1c2f72','#2b459c','#4a68c4'] },
@@ -320,7 +328,7 @@ function waveBandPath(c, edgeU, uFar) {
 
 function buildWaveSvg(g, W, H) {
   var bands, N, i, k, m, c, rad, cs, sn, xs, ys, t, u;
-  var tmin, tmax, umin, umax, T, L, bw, lam, h, w, ph, A1, A2, D, uFar, uEdge, uBase;
+  var tmin, tmax, umin, umax, T, L, bw, lam, h, w, ph, A1, A2, D, uFar, uEdge, uBase, segs;
   var shade, layers, parts, d, dx, dy, st, kFirst, kLast, col, t0, t1;
 
   W = +W; H = +H;
@@ -329,7 +337,8 @@ function buildWaveSvg(g, W, H) {
 
   bands = (g && g.bands && g.bands.length) ? g.bands : WAVE_DEFAULT_BANDS;
 
-  rad = WAVE_TILT_DEG * Math.PI / 180;
+  var tilt = (typeof waveDir === 'function') ? waveDir() : WAVE_TILT_DEG;
+  rad = tilt * Math.PI / 180;
   cs = Math.cos(rad);
   sn = Math.sin(rad);
 
@@ -351,7 +360,8 @@ function buildWaveSvg(g, W, H) {
   N = waveClamp(Math.round(L / WAVE_TARGET_BW), WAVE_MIN_RIBBONS, WAVE_MAX_RIBBONS);
   bw = L / N;                           /* band width: whole ramp spans the viewport */
   lam = T / WAVE_CYCLES;                /* one wavelength along t */
-  h = lam / WAVE_SEGS;
+  segs = waveLowDetail ? 8 : WAVE_SEGS; /* lighter geometry while dragging */
+  h = lam / segs;
   A1 = WAVE_A1 * bw;
   A2 = WAVE_A2 * bw;
   w = 2 * Math.PI / lam;
@@ -369,7 +379,7 @@ function buildWaveSvg(g, W, H) {
   uFar = umax + 3 * bw;
   uBase = umin - 4 * bw;
   shade = waveMix(bands[0], '#000000', WAVE_SHADOW_BLACK);
-  layers = waveShadow(WAVE_SHADOW_LAYERS, WAVE_SHADOW_TOTAL, WAVE_SHADOW_Q);
+  layers = waveShadow(waveLowDetail ? 2 : WAVE_SHADOW_LAYERS, WAVE_SHADOW_TOTAL, WAVE_SHADOW_Q);
 
   parts = [];
   parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ' +
@@ -443,26 +453,119 @@ function applyGradient(i){
   if(typeof i !== 'number') i = gradientIndex();
   var g = GRADIENTS[i] || GRADIENTS[0];
   var root = document.documentElement.style;
-  root.setProperty('--grad-bg', g.css);
+  root.setProperty('--grad-bg', bandCss(g));
   applyWave(i);
   /* adaptive glass reads its tint from the scene, so a palette change is a
      tint change — re-derive it quietly on the next frame */
   if(glassTintMode() === 'adaptive') queueGlass();
 }
-/* how much the gradient drifts: 'still', 'slow' or 'flow'. Slow is the
-   default — a barely-there life in the colours that costs almost nothing. */
+/* how much the gradient drifts: 'still' or 'flow'. Flowing is the default —
+   a gentle, always-there life in the colours. */
 function motionMode(){
   var m = gs(K.motion);
-  return (m === 'still' || m === 'flow') ? m : 'slow';
+  return (m === 'still') ? 'still' : 'flow';
 }
-/* 1–100, left slow, right fast. 60 gives a fresh install a drift you can
-   actually see, while still reading as calm. */
+/* 1–100, left slow, right fast. 50 is the calm default. */
 function motionSpeed(){
   var s = parseInt(gs(K.motionSpeed),10);
-  if(isNaN(s)) s = 60;
+  if(isNaN(s)) s = 50;
   return Math.max(1, Math.min(100, s));
 }
-/* the slow-mode cycle in seconds for the current speed. A shorter cycle is a
+/* ===== wave direction: rotates the ribbon SHAPE (independent of Flow) ===== */
+var waveRaf = 0;
+var waveLowDetail = false;   /* true while a slider is dragged: drop shadows */
+
+function waveDir(){
+  var d = parseInt(gs(K.waveDir),10);
+  if(isNaN(d)) d = 40;              /* default keeps the calm look */
+  d = ((d % 360) + 360) % 360;      /* wrap into 0..359 */
+  return d;
+}
+
+function syncWaveDirUI(){
+  var d = waveDir();
+  [['iwavedir','iwavedir-v','wavedir-dial'],['ob-wavedir','ob-wavedir-v','ob-wavedir-dial']]
+    .forEach(function(t){
+      var r = $(t[0]), v = $(t[1]), dial = $(t[2]);
+      if(r){ r.value = d; syncRangeFill(r); }
+      if(v) v.textContent = d + '\u00b0';
+      if(dial) dial.style.transform = 'rotate(' + d + 'deg)'; /* needle */
+    });
+}
+
+/* at most one rebuild per animation frame */
+function waveScheduleRebuild(){
+  if(waveRaf) return;
+  var run = function(){
+    waveRaf = 0;
+    if(typeof applyWave === 'function') applyWave(gradientIndex());
+  };
+  if(typeof window.requestAnimationFrame === 'function'){
+    waveRaf = window.requestAnimationFrame(run);
+  } else {
+    waveRaf = 1;
+    setTimeout(run, 16);
+  }
+}
+
+/* shared setter: store now, repaint readout + dial now, rebuild next frame. */
+function waveSetDir(val){
+  var d = parseInt(val,10);
+  if(isNaN(d)) d = 40;
+  d = ((d % 360) + 360) % 360;
+  ss(K.waveDir, String(d));
+  syncWaveDirUI();
+  waveScheduleRebuild();
+  return d;
+}
+/* ── Calm Flow view: zoom + pan, mirroring the video wallpaper controls ── */
+function waveZoomVal(){
+  var z = parseInt(gs(K.waveZoom),10);
+  if(isNaN(z)) z = 100;
+  return Math.max(100, Math.min(250, z));
+}
+function wavePanXVal(){
+  var x = parseInt(gs(K.waveX),10);
+  if(isNaN(x)) x = 0;
+  return Math.max(-600, Math.min(600, x));
+}
+function wavePanYVal(){
+  var y = parseInt(gs(K.waveY),10);
+  if(isNaN(y)) y = 0;
+  return Math.max(-600, Math.min(600, y));
+}
+function syncWaveViewUI(){
+  var z = waveZoomVal(), x = wavePanXVal(), y = wavePanYVal();
+  var zi = $('iwavezoom'), zv = $('iwavezoom-v');
+  if(zi){ zi.value = z; syncRangeFill(zi); }
+  if(zv) zv.textContent = z + '%';
+  var xi = $('iwavex'), xv = $('iwavex-v');
+  if(xi){ xi.value = x; syncRangeFill(xi); }
+  if(xv) xv.textContent = x;
+  var yi = $('iwavey'), yv = $('iwavey-v');
+  if(yi){ yi.value = y; syncRangeFill(yi); }
+  if(yv) yv.textContent = y;
+}
+function applyWaveView(){
+  var root = document.documentElement.style;
+  root.setProperty('--wave-zoom', (waveZoomVal() / 100).toFixed(3));
+  root.setProperty('--wave-pan-x', wavePanXVal() + 'px');
+  root.setProperty('--wave-pan-y', wavePanYVal() + 'px');
+  syncWaveViewUI();
+}
+/* swatch preview built from the wave's own band colours, so the tile matches
+   the wallpaper it produces (dark edge -> pale front). */
+function bandCss(item){
+  if(!item) return '';
+  var b = item.bands;
+  if(!b || !b.length) return item.css || '#000';
+  var n = b.length, out = [], i;
+  for(i = 0; i < n; i++){
+    out.push(b[n - 1 - i] + ' ' + Math.round(i * 100 / (n - 1)) + '%');
+  }
+  return 'linear-gradient(125deg,' + out.join(',') + ')';
+}
+/* the flow cycle in seconds for the current speed. A shorter cycle is a
    faster drift: one full wave-slide, so 100% sweeps the field in a few
    seconds and even the calm default stays clearly alive. Flow rides at 0.45x
    this, so Flowing is always the livelier one. */
@@ -476,7 +579,7 @@ var FLOW_TITLES = { tl:'Top-left', ttb:'Top to bottom', tr:'Top-right', rtl:'Rig
                     ltr:'Left to right', bl:'Bottom-left', btt:'Bottom to top', br:'Bottom-right' };
 function flowDir(){
   var f = gs(K.flow);
-  return (FLOWS.indexOf(f) >= 0) ? f : 'ltr';
+  return (FLOWS.indexOf(f) >= 0) ? f : 'rtl';
 }
 function paintFlowPad(hostId){
   var host = $(hostId);
@@ -484,6 +587,14 @@ function paintFlowPad(hostId){
   var cur = flowDir();
   Array.prototype.forEach.call(host.querySelectorAll('.seg-btn'), function(b){
     b.classList.toggle('on', b.getAttribute('data-flow') === cur);
+  });
+}
+/* speed is a ten-step segmented control, not a slider */
+function paintSpeedSeg(hostId, sp){
+  var host = $(hostId);
+  if(!host) return;
+  Array.prototype.forEach.call(host.querySelectorAll('.seg-btn'), function(b){
+    b.classList.toggle('on', parseInt(b.getAttribute('data-speed'),10) === sp);
   });
 }
 function buildFlowPad(hostId, onPick){
@@ -515,13 +626,16 @@ function applyMotion(){
     });
   }
   paintFlowPad('flow-seg');
-  var sp = motionSpeed();
-  var s1 = $('imotionspeed'), s1v = $('imotionspeed-v');
-  if(s1) s1.value = sp;
-  if(s1v) s1v.textContent = sp + '%';
-  var s2 = $('ob-motion-speed'), s2v = $('ob-motion-speed-v');
-  if(s2) s2.value = sp;
-  if(s2v) s2v.textContent = sp + '%';
+  paintSpeedSeg('motion-speed-seg', motionSpeed());
+  paintSpeedSeg('ob-motion-speed-seg', motionSpeed());
+  /* Still has no drift, so Speed and Flow direction do nothing — tuck them
+     away. Wave direction and zoom/pan still apply to the static field. */
+  var still = (motionMode() === 'still');
+  var mw = $('flow-move-wrap');
+  if(mw) mw.style.display = still ? 'none' : '';
+  var mwOb = $('ob-flow-move-wrap');
+  if(mwOb) mwOb.style.display = still ? 'none' : '';
+  syncWaveDirUI();
 }
 function buildGradGrid(){
   var g = $('grad-grid');
@@ -534,7 +648,7 @@ function buildGradGrid(){
     c.setAttribute('data-grad', String(i));
     c.setAttribute('role', 'button');
     c.setAttribute('tabindex', '0');
-    c.style.background = item.css;
+    c.style.background = bandCss(item);
     var label = document.createElement('span');
     label.textContent = item.name;
     c.appendChild(label);
@@ -745,16 +859,18 @@ var LOCAL_QUOTES = {
    windows (.win-panel) and the dimmer behind both. Every style fades through
    opacity — which is both the 1.0 blur-fade look *and* the cheap path, because
    a panel below full opacity skips its backdrop sampling, so the glass is only
-   re-rasterised once, when the fade lands. Animating a full-strength transform
-   instead would re-sample the lens on every frame; this is what fixes the fps
-   dip when a widget opens.
+   re-rasterised once, when the fade lands. A sheet therefore animates opacity
+   alone: a transform or a filter on a live backdrop lens would force a fresh
+   full-screen sample on every frame, which is what made opening a widget or the
+   settings sheet drop frames. The paused-lens shortcut this replaced changed the
+   look mid-animation, so it was removed.
 ══════════════════════════════════════════ */
 function applyAnimStyle(id){
   var style = $('anim-vars');
   if(!style){ style = document.createElement('style'); style.id = 'anim-vars'; document.head.appendChild(style); }
   var SEL_C = '#overlay #panel,.win-modal .win-panel,.prayer-modal .prayer-panel';
   var SEL_O = '#overlay.open-anim #panel,.win-modal.in .win-panel,.prayer-modal.in .prayer-panel';
-  var SCRIM = '#overlay,.win-modal,.prayer-modal{transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;}';
+  var SCRIM = '#overlay,.win-modal,.prayer-modal{transition:background-color 0.30s ease;}';
 
   /* closed transform, duration, easing, closed blur (px), pane anim, keyframes, extra */
   var S = {
@@ -793,12 +909,19 @@ function applyAnimStyle(id){
   if(id === 'none'){
     css = '#overlay,.win-modal,.prayer-modal{transition:none;}' +
           SEL_C + '{transition:none;transform:none;opacity:1;filter:none;}' +
-          '.pane.on{animation:none;}';
+          '.pane.on{animation:none;}' +
+          '.lx-show,.lx-hide{animation:none;}';
   } else {
     var s = S[id] || S.spring;
+    /* reuse the pane keyframes so a settings section can reveal/hide with the
+       same motion the user picked for panels; `reverse both` reads as a fade
+       back out for the disappearance */
+    var am = s.pane ? s.pane.match(/animation:([^;]+);/) : null;
+    var revealAnim = am ? am[1].replace(/\s*forwards\s*$/,'') : '';
     css = SCRIM +
-      SEL_C + '{transition:transform ' + s.dur + ' ' + s.ease + ',opacity ' + s.dur + ' ease,filter ' + s.dur + ' ease;transform:' + s.closed + ';opacity:0;filter:blur(' + s.blur + 'px);}' +
-      SEL_O + '{transform:none;opacity:1;filter:blur(0);}' +
+      SEL_C + '{transition:opacity ' + s.dur + ' ease;opacity:0;}' +
+      SEL_O + '{opacity:1;}' +
+      (revealAnim ? '.lx-show{animation:' + revealAnim + ' both;}.lx-hide{animation:' + revealAnim + ' reverse both;}' : '') +
       (s.pane || '') + (s.kf || '') + (s.extra || '');
   }
   style.textContent = css;
@@ -924,51 +1047,316 @@ function effectiveTint(){
   if(glassTintMode() === 'adaptive') return paletteAccent();
   return gs(K.glassTint) || GLASS_TINTS[GLASS_TINTS.length - 1];
 }
-/* One displacement map, generated once and reused by every surface. R and G
-   encode an INWARD push (toward the centre) that grows toward the edge — a
-   lens, not a wobble. 128 is "no shift", so the centre of every card stays
-   flat and crisp, and the bend only ever samples the element's own backdrop,
-   never the transparent void beyond it (which is what painted black rims). */
-var _lensMapURL = null;
-function lensMapURL(){
-  if(_lensMapURL) return _lensMapURL;
-  var size = 256;
-  var cv = document.createElement('canvas');
-  cv.width = cv.height = size;
-  var ctx = cv.getContext('2d');
+/* Liquid Glass lens: a MIRROR at every edge, not a blur.
+   Each surface's backdrop is flipped about a line just inside each border, so
+   the rim shows the strip beside it reflected: bottom mirrors up, top mirrors
+   down, left mirrors right, right mirrors left. The calm middle is untouched.
+
+   The delivery took two fixes:
+   - Chromium does not stretch a percentage-sized feImage inside a shared SVG
+     filter, so the 2.0 build only showed the field on the bottom/right.
+   - It also drops backdrop-filter references to per-element filters addressed by
+     fragment id (url(#lg-f-0)) and the lens vanished.
+   So every surface gets a complete filter as a data URL, sized in real pixels
+   and carrying its own small displacement map.
+
+   In each edge band the displacement ramps linearly from the band boundary to
+   the rim, and feDisplacementMap scale = 4 x band, which produces exactly a
+   2 x band shift at the rim: a true mirror of the band-wide strip just inside.
+   Sliders: strength scales that shift; edge sets the band in pixels (0 = Auto);
+   spread widens the band; zoom magnifies the middle only. With Custom lens off
+   the recommended lens is used. */
+var _lensMaps = {}, _lensMapCount = 0;
+var _lensTimer = null, _lensLiveRaf = 0, _lensLiveIdle = null;
+var _lensPreview = false, _lensSyncQueued = false;
+var _lensRecs = [], _lensRO = null, _lensParts = {}, _lensTick = 0;
+var _LENS_SHEET_SEL = '#panel, .win-panel, .prayer-panel, .changelog-panel';
+
+/* Fresh install and "Reset lens" both use this preset: 17% strength,
+   25px edge, 140% spread, 24% zoom. A fixed edge width is used on purpose,
+   because "Auto" would change the band with every card size. */
+var LENS_DEF_PEAK   = 0.17;
+var LENS_DEF_EDGE   = 25;
+var LENS_DEF_SPREAD = 1.40;
+var LENS_DEF_ZOOM   = 0.24;
+
+function lensCustom(){ return gs(K.lensCustom) === '1'; }
+function lensPeak(){
+  if(!lensCustom()) return LENS_DEF_PEAK;
+  var v = parseFloat(gs(K.lensPeak));
+  if(!isFinite(v)) v = LENS_DEF_PEAK * 100;
+  return Math.max(0, Math.min(0.85, v / 100));
+}
+function lensEdgePx(){
+  if(!lensCustom()) return LENS_DEF_EDGE;
+  var v = parseFloat(gs(K.lensEdge));
+  if(!isFinite(v)) v = LENS_DEF_EDGE;
+  if(v <= 0) return 0;                          /* 0 = automatic */
+  return Math.max(2, Math.min(60, v));
+}
+function lensSpread(){
+  if(!lensCustom()) return LENS_DEF_SPREAD;
+  var v = parseFloat(gs(K.lensSpread));
+  if(!isFinite(v)) v = LENS_DEF_SPREAD * 100;
+  return Math.max(10, Math.min(250, v)) / 100;
+}
+function lensZoom(){
+  if(!lensCustom()) return LENS_DEF_ZOOM;
+  var v = parseFloat(gs(K.lensZoom));
+  if(!isFinite(v)) v = LENS_DEF_ZOOM * 100;
+  return Math.max(0, Math.min(35, v)) / 100;
+}
+function lensEdgeLabel(v){
+  v = parseInt(v, 10) || 0;
+  return v > 0 ? (v + 'px') : 'Auto';
+}
+/* Band width in pixels: the Edge slider sets the base, Spread widens it.
+   Edge 0 ("Auto") uses a share of the short side. Capped so a full mirror can
+   never sample past the opposite edge. */
+function lensBandPx(w, h){
+  var e = lensEdgePx();
+  var base = e > 0 ? e * 2.4 : Math.min(w, h) * 0.22;
+  var b = base * lensSpread();
+  var cap = Math.min(w, h) / 2.1;
+  return Math.max(6, Math.min(b, cap));
+}
+/* Each surface's map is a small square carried by its own data-URL filter. The
+   R channel drives x, G drives y. In each edge band the displacement grows
+   linearly toward the rim, so the band samples the strip just inside it and
+   shows it FLIPPED: bottom mirrors up, top mirrors down, left mirrors right,
+   right mirrors left. Inside the bands the small Zoom term magnifies instead. */
+function lensMapSig(w, h){
+  return Math.round(w) + 'x' + Math.round(h) + '@' + lensPeak().toFixed(3) +
+         'e' + lensEdgePx().toFixed(0) + 's' + lensSpread().toFixed(3) +
+         'z' + lensZoom().toFixed(3);
+}
+function lensMapFor(w, h){
+  var key = lensMapSig(w, h);
+  if(_lensMaps[key]) return _lensMaps[key];
+  if(++_lensMapCount > 48){ _lensMaps = {}; _lensMapCount = 0; }
+  w = Math.max(1, w); h = Math.max(1, h);
+  /* Strength deepens the mirror by widening the band. Scaling the offset
+     half-way would compress the reflection into a streak, so the band width is
+     what changes instead and the flip stays exact at every setting. */
+  var str = Math.max(0, Math.min(1, lensPeak() / 0.85));
+  var B = lensBandPx(w, h) * str;
+  var fx = B > 0 ? Math.min(0.45, B / w) : 0;
+  var fy = B > 0 ? Math.min(0.45, B / h) : 0;
+  var zoomAmp = lensZoom() * 0.25;
+  var N = _lensPreview ? 64 : 128;
+  var cv = document.createElement('canvas'), ctx, img, data;
+  cv.width = cv.height = N;
+  ctx = cv.getContext('2d');
   if(!ctx) return null;
-  var img = ctx.createImageData(size, size);
-  var data = img.data;
-  var c = (size - 1) / 2, R = size / 2;
-  for(var y = 0; y < size; y++){
-    for(var x = 0; x < size; x++){
-      var dx = (x - c) / R, dy = (y - c) / R;
-      var dist = Math.sqrt(dx * dx + dy * dy) || 0.0001;
-      var ux = dx / dist, uy = dy / dist;        /* outward direction */
-      /* flat until ~20% out, then a smooth ramp to full push at the rim */
-      var t = (Math.min(1, dist) - 0.2) / 0.75;
-      t = Math.max(0, Math.min(1, t));
-      var f = t * t * (3 - 2 * t);               /* smoothstep */
-      var i = (y * size + x) * 4;
-      data[i]   = 128 - ux * f * 127;            /* R → x shift, inward */
-      data[i+1] = 128 - uy * f * 127;            /* G → y shift, inward */
-      data[i+2] = 0;
-      data[i+3] = 255;
+  img = ctx.createImageData(N, N);
+  data = img.data;
+  var i, j, k, nx, ny, ax, ay, tx, ty, devX, devY, interior;
+  for(j = 0; j < N; j++){
+    ny = (j + 0.5) / N;
+    ay = Math.min(ny, 1 - ny);
+    ty = fy > 0 ? Math.max(0, Math.min(1, (fy - ay) / fy)) : 0;
+    for(i = 0; i < N; i++){
+      nx = (i + 0.5) / N;
+      ax = Math.min(nx, 1 - nx);
+      tx = fx > 0 ? Math.max(0, Math.min(1, (fx - ax) / fx)) : 0;
+      devX = 0; devY = 0;
+      /* mirror: the sample moves away from the edge it is reflecting */
+      if(tx > 0) devX = (nx < 0.5 ? 1 : -1) * 0.5 * tx;
+      if(ty > 0) devY = (ny < 0.5 ? 1 : -1) * 0.5 * ty;
+      /* magnification only in the calm middle, never inside a mirror band */
+      interior = 1 - Math.max(tx, ty);
+      if(zoomAmp > 0 && interior > 0){
+        devX -= (nx - 0.5) * zoomAmp * interior;
+        devY -= (ny - 0.5) * zoomAmp * interior;
+      }
+      k = (j * N + i) * 4;
+      data[k]     = Math.round(Math.max(0, Math.min(1, 0.5 + devX)) * 255);
+      data[k + 1] = Math.round(Math.max(0, Math.min(1, 0.5 + devY)) * 255);
+      data[k + 2] = 0;
+      data[k + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
-  _lensMapURL = cv.toDataURL('image/png');
-  return _lensMapURL;
+  /* scale 4B gives exactly a 2B shift at the rim: a true mirror of the B-wide
+     strip just inside each edge */
+  var map = { url: cv.toDataURL('image/png'), scale: Math.round(4 * B * 10) / 10, key: key };
+  _lensMaps[key] = map;
+  return map;
+}
+function lensIsSheet(el){
+  return !!(el && el.matches && el.matches(_LENS_SHEET_SEL));
+}
+/* Cards nested inside a sheet read the sheet, not the wallpaper. */
+function lensInsideSheet(el){
+  var p = el.parentNode;
+  while(p && p.nodeType === 1){
+    if(p.matches && p.matches(_LENS_SHEET_SEL)) return true;
+    p = p.parentNode;
+  }
+  return false;
+}
+/* The proven delivery: the whole filter travels as a data URL, because Chromium
+   does not honour a plain url(#id) reference in backdrop-filter. The SVG
+   carries this surface's exact pixel size and a matching viewBox, so the map
+   lands 1:1 on the border box and every edge mirrors. */
+function lensFilterURL(rec){
+  var map = lensMapFor(rec.w, rec.h);
+  if(!map) return '';
+  var w = Math.max(2, Math.round(rec.w)), h = Math.max(2, Math.round(rec.h));
+  var mw = w + 2, mh = h + 2;
+  var key = mw + 'x' + mh + '@' + map.key;
+  if(_lensParts[key]) return _lensParts[key];
+  if(Object.keys(_lensParts).length > 40) _lensParts = {};
+  var svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + mw + '" height="' + mh +
+    '" viewBox="0 0 ' + mw + ' ' + mh + '">' +
+      '<defs>' +
+        '<filter id="lg" color-interpolation-filters="sRGB">' +
+          '<feImage x="0" y="0" width="' + mw + '" height="' + mh +
+            '" preserveAspectRatio="none" href="' + map.url + '" result="map"/>' +
+          '<feDisplacementMap in="SourceGraphic" in2="map" scale="' + map.scale +
+            '" xChannelSelector="R" yChannelSelector="G"/>' +
+        '</filter>' +
+      '</defs>' +
+    '</svg>';
+  var out = 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '#lg")';
+  _lensParts[key] = out;
+  return out;
+}
+function paintLens(rec){
+  var u = lensFilterURL(rec);
+  if(!u || rec.url === u) return;
+  rec.url = u;
+  var css = rec.kind === 'sheet'
+    ? 'blur(var(--glass-sheet-blur,20px)) ' + u + ' saturate(165%)'
+    : 'blur(var(--glass-blur)) ' + u + ' saturate(170%) brightness(1.05)';
+  rec.el.style.setProperty('backdrop-filter', css);
+  rec.el.style.setProperty('-webkit-backdrop-filter', css);
+}
+/* Size each surface's filter to its real border box, and create/tear down the
+   inline references as surfaces open, close or resize. */
+function syncLensFilters(){
+  if(!document.body.classList.contains('glass-liquid')) return;
+  var list = document.querySelectorAll('.glass, #gear-btn, #layout-btn');
+  var tick = (_lensTick += 1), i, j, rec, el, w, h, kind;
+  for(i = 0; i < list.length; i++){
+    el = list[i];
+    if(!lensIsSheet(el) && lensInsideSheet(el)) continue;
+    w = el.offsetWidth; h = el.offsetHeight;
+    if(w < 4 || h < 4) continue;
+    rec = null;
+    for(j = 0; j < _lensRecs.length; j++){
+      if(_lensRecs[j].el === el){ rec = _lensRecs[j]; break; }
+    }
+    if(!rec){
+      rec = { el:el, w:0, h:0, kind:'', url:'' };
+      _lensRecs.push(rec);
+      if(_lensRO) _lensRO.observe(el);
+    }
+    rec.tick = tick;
+    kind = lensIsSheet(el) ? 'sheet' : 'card';
+    if(rec.w !== w || rec.h !== h || rec.kind !== kind){
+      rec.w = w; rec.h = h; rec.kind = kind; rec.url = '';
+      paintLens(rec);
+    }
+  }
+  for(i = 0; i < _lensRecs.length; i++){
+    rec = _lensRecs[i];
+    if(rec.tick !== tick){
+      rec.w = 0; rec.h = 0; rec.url = '';
+      rec.el.style.removeProperty('backdrop-filter');
+      rec.el.style.removeProperty('-webkit-backdrop-filter');
+    }
+  }
 }
 function applyLensMap(){
-  var im = $('lg-map');
-  if(!im) return;
-  var url = lensMapURL();
-  if(!url) return;
-  /* xlink:href is the form every engine agrees on; href alone is newer. Set both. */
-  im.setAttributeNS('http://www.w3.org/1999/xlink', 'href', url);
-  im.setAttribute('href', url);
+  for(var i = 0; i < _lensRecs.length; i++){
+    if(_lensRecs[i].w > 0) paintLens(_lensRecs[i]);
+  }
 }
+function dropLensCache(){ _lensMaps = {}; _lensMapCount = 0; _lensParts = {}; }
+/* Classic writes no inline filter, but tolerate any left over from an older build. */
+function clearLensFilters(){
+  var list = document.querySelectorAll('.glass, #gear-btn, #layout-btn, #panel, .win-panel, .prayer-panel, .changelog-panel');
+  for(var i = 0; i < list.length; i++){
+    list[i].style.removeProperty('backdrop-filter');
+    list[i].style.removeProperty('-webkit-backdrop-filter');
+  }
+  for(i = 0; i < _lensRecs.length; i++){
+    _lensRecs[i].w = 0; _lensRecs[i].h = 0; _lensRecs[i].url = '';
+  }
+}
+function lensObserve(){
+  if(_lensRO || !window.ResizeObserver) return;
+  _lensRO = new ResizeObserver(function(){
+    if(_lensSyncQueued) return;
+    _lensSyncQueued = true;
+    window.requestAnimationFrame(function(){
+      _lensSyncQueued = false;
+      if(document.body.classList.contains('glass-liquid')) scheduleLens();
+    });
+  });
+  var list = document.querySelectorAll('.glass, #gear-btn, #layout-btn');
+  for(var i = 0; i < list.length; i++) _lensRO.observe(list[i]);
+}
+function scheduleLens(){
+  if(_lensTimer) clearTimeout(_lensTimer);
+  _lensTimer = setTimeout(function(){
+    _lensTimer = null;
+    if(!document.body.classList.contains('glass-liquid')) return;
+    applyLensMap();
+    syncLensFilters();
+  }, 60);
+}
+/* Dragging a lens slider: rebuild at a small map so the drag stays smooth, then
+   one sharp pass on release / after 220ms of quiet. */
+function scheduleLensLive(){
+  _lensPreview = true;
+  if(!_lensLiveRaf && window.requestAnimationFrame){
+    _lensLiveRaf = window.requestAnimationFrame(function(){
+      _lensLiveRaf = 0;
+      if(document.body.classList.contains('glass-liquid')){
+        applyLensMap();
+        syncLensFilters();
+      }
+    });
+  }
+  if(_lensLiveIdle) clearTimeout(_lensLiveIdle);
+  _lensLiveIdle = setTimeout(scheduleLensFull, 220);
+}
+function scheduleLensFull(){
+  if(_lensLiveIdle){ clearTimeout(_lensLiveIdle); _lensLiveIdle = null; }
+  if(_lensLiveRaf && window.cancelAnimationFrame){
+    window.cancelAnimationFrame(_lensLiveRaf);
+    _lensLiveRaf = 0;
+  }
+  _lensPreview = false;
+  if(document.body.classList.contains('glass-liquid')){
+    applyLensMap();
+    syncLensFilters();
+  }
+}
+window.addEventListener('resize', function(){ scheduleLens(); });
+
+
+/* dragging the window between monitors with different DPR fires no resize;
+   watch the media query and rebuild the maps when it changes */
+function watchDpr(){
+  if(!window.matchMedia) return;
+  var mq;
+  try{
+    mq = window.matchMedia('(resolution: ' + (window.devicePixelRatio || 1) + 'dppx)');
+  }catch(e){ return; }
+  function onChange(){
+    if(mq.removeEventListener) mq.removeEventListener('change', onChange);
+    else if(mq.removeListener) mq.removeListener(onChange);
+    scheduleLens();
+    watchDpr();
+  }
+  if(mq.addEventListener) mq.addEventListener('change', onChange);
+  else if(mq.addListener) mq.addListener(onChange);
+}
+watchDpr();
 /* Liquid Glass is the one heavy thing here. After it is switched on, watch the
    real frame rate for a moment. If the device cannot hold a calm pace, ask
    before changing anything — a silent downgrade is never the answer. The same
@@ -1094,8 +1482,15 @@ function applyGlassSettings(){
       btn.classList.toggle('on', btn.getAttribute('data-tintmode') === glassTintMode());
     });
   }
-  if(liquid){ applyLensMap(); glassPerfProbe(); }
+  if(liquid){
+    lensObserve();
+    applyLensMap();
+    syncLensFilters();
+    glassPerfProbe();
+  }
   else {
+    /* Classic must not inherit an inline lens written by an older build */
+    clearLensFilters();
     hideGlassPerfPrompt();
     if(_perfPromptTimer){ clearTimeout(_perfPromptTimer); _perfPromptTimer = null; }
   }
@@ -1292,7 +1687,7 @@ function updateTabName(){
 function clockTitle(){
   var now = wallNow();
   var h = now.h;
-  var hf = gs(K.hourFmt) || '12';
+  var hf = gs(K.hourFmt) || '24';
   var hh = hf === '12' ? (h % 12 || 12) : h;
   return hh + ':' + String(now.m).padStart(2,'0');
 }
@@ -1824,7 +2219,7 @@ function applyWallModeUI(){
   selectIn($('wall-grid'),'.wall-card','data-wall', grad ? 'gradient' : 'video');
   var hint = $('wall-hint');
   if(hint) hint.textContent = grad
-    ? 'Calm Gradient \u2014 a soft static colour. It also asks a little less of your battery.'
+    ? 'Calm Wave \u2014 a soft static colour. It also asks a little less of your battery.'
     : 'Video Wallpaper \u2014 your video plays behind the glass. Choose a video below.';
 }
 /* First run: start on the gradient so nobody meets a black empty page. Any
@@ -1845,7 +2240,7 @@ function ensureWallModeDefault(){
 /* ══════════════════════════════════════════
    LAYOUT EDIT + DRAG
 ══════════════════════════════════════════ */
-var EL_IDS = ['shortcuts','datetime','calendar','prayer','greeting-wrap','searchbar','gear-btn','weather','quote'];
+var EL_IDS = ['shortcuts','datetime','calendar','prayer','greeting-wrap','searchbar','gear-btn','weather','quote','stocks'];
 var _layoutEditing = false;
 var _lastDragEnd = 0;
 
@@ -1961,9 +2356,9 @@ function applyPositions(){
 /* ══════════════════════════════════════════
    FREE RESIZE (widget cards)
 ══════════════════════════════════════════ */
-var RESIZABLE = ['shortcuts','datetime','calendar','prayer','greeting-wrap','searchbar','weather','quote'];
-var MIN_W = {shortcuts:140, datetime:120, calendar:160, prayer:150, 'greeting-wrap':140, searchbar:220, weather:120, quote:180};
-var MIN_H = {shortcuts:70,  datetime:70,  calendar:128, prayer:76,  'greeting-wrap':48,  searchbar:44,  weather:70,  quote:60};
+var RESIZABLE = ['shortcuts','datetime','calendar','prayer','greeting-wrap','searchbar','weather','quote','stocks'];
+var MIN_W = {shortcuts:140, datetime:120, calendar:160, prayer:150, 'greeting-wrap':140, searchbar:220, weather:120, quote:180, stocks:150};
+var MIN_H = {shortcuts:70,  datetime:70,  calendar:128, prayer:76,  'greeting-wrap':48,  searchbar:44,  weather:70,  quote:60, stocks:80};
 
 /* nominal "design" size of every card — the reference point for content
    scaling, so a bigger card really means bigger text, not empty space */
@@ -1975,7 +2370,8 @@ var DEFAULT_SIZE = {
   'greeting-wrap': { w:300, h:50 },
   searchbar:       { w:500, h:42 },
   weather:         { w:152, h:90 },
-  quote:           { w:300, h:96 }
+  quote:           { w:300, h:96 },
+  stocks:          { w:200, h:132 }
 };
 /* nothing may be measured smaller than this — the content would clip */
 var NATURAL_MIN = {
@@ -1986,7 +2382,17 @@ var NATURAL_MIN = {
   'greeting-wrap': { w:240, h:50  },
   searchbar:       { w:420, h:42  },
   weather:         { w:180, h:112 },
-  quote:           { w:300, h:100 }
+  quote:           { w:300, h:100 },
+  stocks:          { w:180, h:110 }
+};
+/* Cards whose text changes with the network must not use the current content
+   as their base. A placeholder such as "Updating..." measured at boot used to
+   shrink the base, so after data arrived the grid columns collapsed. These
+   bases are stable for the life of the profile; the card still scales with
+   --ws, and the user can resize it. */
+var FIXED_BASE = {
+  weather: { w:180, h:112 },
+  stocks:  { w:248, h:132 }
 };
 var _baseSize = {};
 var _padSize = {};
@@ -2010,6 +2416,11 @@ function measureBases(){
       y: (parseFloat(cs.paddingTop)  || 0) + (parseFloat(cs.paddingBottom) || 0)
     };
 
+    if(FIXED_BASE[id]){
+      _baseSize[id] = { w:FIXED_BASE[id].w, h:FIXED_BASE[id].h };
+      return;
+    }
+
     /* hidden cards have no measurable size — use the nominal one */
     if(el.classList.contains('hidden') || el.offsetWidth === 0){
       var hw = def.w, hh = def.h;
@@ -2025,11 +2436,14 @@ function measureBases(){
 
     var pw = el.style.width, ph = el.style.height;
     var ws = el.style.getPropertyValue('--ws');
+    var wbw = el.style.getPropertyValue('--wbw');
     el.style.width = ''; el.style.height = '';
     el.style.removeProperty('--ws');
+    el.style.removeProperty('--wbw');
     var w = el.offsetWidth, h = el.offsetHeight;
     el.style.width = pw; el.style.height = ph;
     if(ws) el.style.setProperty('--ws',ws);
+    if(wbw) el.style.setProperty('--wbw',wbw);
 
     _baseSize[id] = {
       w: Math.max(floor.w, w || def.w),
@@ -2044,7 +2458,7 @@ function applySizeScale(id,live){
   var base = _baseSize[id] || DEFAULT_SIZE[id];
   if(!base || !base.w || !base.h) return;
   var s = (parseJSON(gs(K.sizes),{}) || {})[id];
-  if(!s && !live){ el.style.removeProperty('--ws'); return; }
+  if(!s && !live){ el.style.removeProperty('--ws'); el.style.removeProperty('--wbw'); return; }
   var w = el.offsetWidth || s.w, h = el.offsetHeight || s.h;
   /* compare content boxes, so the fixed padding doesn't inflate the scale */
   var pad = _padSize[id] || { x:0, y:0 };
@@ -2055,6 +2469,11 @@ function applySizeScale(id,live){
   var scale = (auto || !(s && s.h > 0)) ? (aw / bw) : Math.min(aw / bw, ah / bh);
   scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, scale));
   el.style.setProperty('--ws', String(Math.round(scale * 1000) / 1000));
+  /* The markets grid has fixed-width value columns. `zoom` shrinks its local
+     layout width as it grows, which collapsed the 1fr symbol column. Giving the
+     body its true base width keeps the columns intact while zoom scales the
+     whole thing to the card. */
+  el.style.setProperty('--wbw', Math.round(bw) + 'px');
 }
 
 function syncInnerSize(el){
@@ -2068,7 +2487,7 @@ function applySizes(){
   RESIZABLE.forEach(function(id){
     var el = $(id), s = sizes[id];
     if(!el) return;
-    if(!s){ el.style.removeProperty('--ws'); return; }
+    if(!s){ el.style.removeProperty('--ws'); el.style.removeProperty('--wbw'); return; }
     var w = Math.max(MIN_W[id] || 120, Math.min(window.innerWidth,  s.w));
     var auto = s.auto === 1 || s.auto === true;
     el.style.width = w + 'px';
@@ -2082,6 +2501,7 @@ function applySizes(){
     syncInnerSize(el);
     applySizeScale(id);
   });
+  scheduleLens();
 }
 
 /* re-measure and re-fit every auto widget after a font/content change */
@@ -2129,6 +2549,7 @@ function resetWidget(id){
   el.style.transform = '';
   el.style.width = ''; el.style.height = '';
   el.style.removeProperty('--ws');
+  el.style.removeProperty('--wbw');
   var body = el.querySelector('.w-body');
   if(body) body.style.zoom = '';
   if(id === 'searchbar'){
@@ -2176,6 +2597,7 @@ function addResizeKnob(el){
     el.style.height = h + 'px';
     syncInnerSize(el);
     applySizeScale(id,true);
+    scheduleLens();
   }
   function onEnd(){
     if(!resizing) return;
@@ -2183,6 +2605,7 @@ function addResizeKnob(el){
     var sizes = parseJSON(gs(K.sizes),{}) || {};
     sizes[id] = { w:el.offsetWidth, h:el.offsetHeight, auto:0 };
     ss(K.sizes,JSON.stringify(sizes));
+    scheduleLens();
     document.removeEventListener('mousemove',onMove);
     document.removeEventListener('mouseup',onEnd);
     document.removeEventListener('touchmove',onMove);
@@ -2320,7 +2743,8 @@ function applyWidgetVisibility(animate){
     'shortcuts':     gs(K.showShortcuts),
     'weather':       gs(K.showWeather),
     'quote':         gs(K.showQuote),
-    'status-tile':   gs(K.showStatus)
+    'status-tile':   gs(K.showStatus),
+    'stocks':        gs(K.showStocks) === '1' ? '1' : '0'
   };
   Object.keys(map).forEach(function(id){
     var el = $(id);
@@ -2381,8 +2805,8 @@ function setWeatherBusy(on){
   if(!st) return;
   if(on){
     if(_wstatusTimer){ clearTimeout(_wstatusTimer); _wstatusTimer = null; }
-    st.textContent = 'Gathering the forecast\u2026';
-  } else if(st.textContent === 'Gathering the forecast\u2026'){
+    st.textContent = 'Updating\u2026';
+  } else if(st.textContent === 'Updating\u2026'){
     st.textContent = '';
   }
 }
@@ -2405,7 +2829,7 @@ var _rainAbsent = false;
 var _rainChance = null;
 function weatherClockString(ts){
   var dt = ts ? new Date(ts) : new Date();
-  var hf = gs(K.hourFmt) || '12';
+  var hf = gs(K.hourFmt) || '24';
   var h = dt.getHours();
   var hh = (hf === '12') ? (h % 12 || 12) : h;
   return pad2(hh) + ':' + pad2(dt.getMinutes()) + (hf === '12' ? (h < 12 ? ' AM' : ' PM') : '');
@@ -2415,7 +2839,7 @@ function weatherClockString(ts){
 function weatherTimeString(ts){
   if(followCityTime()){
     var dt = new Date((ts || Date.now()) + _tzOffsetSec * 1000);
-    var hf = gs(K.hourFmt) || '12';
+    var hf = gs(K.hourFmt) || '24';
     var h = dt.getUTCHours();
     var hh = (hf === '12') ? (h % 12 || 12) : h;
     return pad2(hh) + ':' + pad2(dt.getUTCMinutes()) + (hf === '12' ? (h < 12 ? ' AM' : ' PM') : '');
@@ -2456,8 +2880,18 @@ function renderWeather(d){
   setText($('w-temp'), String(Math.round(d.temp)));
   setText($('w-unit'), (String(d.unit).toLowerCase() === 'f') ? 'F' : 'C');
   setText($('w-desc'),w[1]);
-  var rain = (d.rain == null) ? 'No rain expected' : rainPhrase(d.rain);
+  var rain;
+  if(d.src === 'bmkg') rain = bmkgRainLabel(d);
+  else rain = (d.rain == null) ? 'No rain expected' : rainPhrase(d.rain);
   setText($('w-rain'),rain);
+  /* always name the source: BMKG when its data is shown, Open-Meteo otherwise */
+  var srcEl = $('w-src');
+  if(srcEl){
+    var isBmkg = d.src === 'bmkg';
+    srcEl.hidden = false;
+    srcEl.textContent = isBmkg ? 'Sumber: BMKG' : 'Source: Open-Meteo';
+    srcEl.href = isBmkg ? 'https://data.bmkg.go.id/prakiraan-cuaca' : 'https://open-meteo.com/';
+  }
   _weatherStamp = d.ts || Date.now();
   _rainAt = d.rainAt || 0;
   _rainHM = d.rainHM || '';
@@ -2477,6 +2911,8 @@ function renderWeather(d){
   if(wEl && (!wsz || wsz.auto === 1 || wsz.auto === true || !(wsz.h > 0))){
     wEl.style.height = '';
   }
+  /* the base is fixed, so this only refreshes --ws/--wbw after the text lands */
+  applySizeScale('weather');
   renderWeatherWindow();
 }
 
@@ -2495,15 +2931,21 @@ function renderWeatherWindow(){
   if(!cache || cache.v !== 2){
     if(wwCity) wwCity.textContent = city || 'No city set';
     if(now) now.innerHTML = '<div class="ww-now-ico">📍</div><div><div class="ww-now-temp">--</div><div class="ww-now-desc">' +
-      (city ? 'Gathering the forecast…' : 'Choose a city below') + '</div></div>';
+      (city ? 'Updating…' : 'Choose a city below') + '</div></div>';
     if(segs) segs.innerHTML = '';
+    var wl0 = $('ww-link'), ws0 = $('ww-src');
+    if(wl0) wl0.hidden = false;
+    if(ws0) ws0.hidden = true;
     return;
   }
   var unit = (String(cache.unit).toLowerCase() === 'f') ? 'F' : 'C';
   var w = WMO[cache.code] || ['🌡️','—'];
-  if(wwCity) wwCity.textContent = cache.label || cache.cityName || cache.city;
+  if(wwCity) wwCity.textContent = (cache.label || cache.cityName || cache.city) +
+    ' \u00b7 ' + (cache.src === 'bmkg' ? 'BMKG' : 'Open-Meteo');
   if(now){
-    var rainTxt = (cache.rain == null) ? '' : rainPhrase(cache.rain);
+    var rainTxt;
+    if(cache.src === 'bmkg') rainTxt = bmkgRainLabel(cache);
+    else rainTxt = (cache.rain == null) ? '' : rainPhrase(cache.rain);
     var meta = (cache.hi != null && cache.lo != null)
       ? 'High ' + Math.round(cache.hi) + '° / Low ' + Math.round(cache.lo) + '°' : '';
     now.innerHTML =
@@ -2516,13 +2958,22 @@ function renderWeatherWindow(){
     segs.innerHTML = (cache.segs || []).map(function(s){
       var sw = WMO[s.code] || ['·',''];
       var t = (s.temp == null) ? '--' : Math.round(s.temp) + '°';
-      var r = (s.rain == null || s.rain < 5) ? 'No rain' : '💧 ' + s.rain + '%';
+      var r;
+      if(cache.src === 'bmkg'){
+        r = (Number(s.code) >= 61) ? bmkgRainWord(s.code, s.rainMm) : 'No rain';
+      } else {
+        r = (s.rain == null || s.rain < 5) ? 'No rain' : '💧 ' + s.rain + '%';
+      }
       return '<div class="ww-seg"><div class="ws-lbl">' + s.lbl + '</div>' +
              '<div class="ws-ico">' + sw[0] + '</div>' +
              '<div class="ws-temp">' + t + '</div>' +
              '<div class="ws-rain">' + r + '</div></div>';
     }).join('');
   }
+  /* credit the source that is actually on screen */
+  var wl = $('ww-link'), ws = $('ww-src'), isBmkg = cache.src === 'bmkg';
+  if(wl) wl.hidden = isBmkg;
+  if(ws) ws.hidden = !isBmkg;
 }
 
 /* one city, shared by the weather card and the prayer times */
@@ -2570,7 +3021,386 @@ function geocode(city){
     }
     var r = j.results[0];
     return { city:city, cityName:r.name, lat:r.latitude, lon:r.longitude,
+             cc:(r.country_code || '').toUpperCase(),
              label:r.name + (r.country ? ', ' + r.country : '') };
+  });
+}
+
+/* ══════════════════════════════════════════
+   BMKG WEATHER  (Indonesia only, keyless via adm4)
+   Curated city → adm4 table, verified live 2026-11-08. Anything unresolved,
+   stale or failing falls straight back to Open-Meteo, silently. BMKG has no
+   rain probability, so the card shows millimetres instead.
+   Attribution is required by BMKG and shown only while src === 'bmkg'.
+══════════════════════════════════════════ */
+var BMKG_URL = 'https://api.bmkg.go.id/publik/prakiraan-cuaca?adm4=';
+var BMKG_TIMEOUT_MS = 6000;
+var BMKG_RAW_TTL_MIN = 180;      /* BMKG republishes ~2×/day; never refetch faster than this */
+var BMKG_MIN_GAP_MS = 120000;    /* even force=true never hits the same adm4 twice inside 2 min */
+var BMKG_BAD_SHORT_MS = 600000;  /* timeout / 5xx / 429 / offline: skip for 10 min */
+var BMKG_BAD_LONG_MS = 86400000; /* 400 / 404 / empty body: skip this adm4 for 24 h */
+var BMKG_RADIUS_KM = 30;         /* nearest-centre match radius when the name is not in the table */
+var BMKG_MAX_CACHED = 4;
+var BMKG_KEY_RAW = 'nt_bmkg_raw';
+var BMKG_KEY_BAD = 'nt_bmkg_bad';
+var bmkgInflight = {};
+
+/* [aliases joined by |, adm4, centre lat, centre lon]. All 34 codes were probed
+   live on 2026-11-08: HTTP 200 and the expected desa/kotkab. Re-probe before
+   changing them; a wrong row simply falls back to Open-Meteo at runtime. */
+var BMKG_CITIES = [
+  ['jakarta|jakarta pusat|dki jakarta|central jakarta', '31.71.01.1001', -6.1763843, 106.8267074],
+  ['jakarta utara|north jakarta', '31.72.01.1001', -6.1384, 106.8639],
+  ['jakarta barat|west jakarta', '31.73.01.1001', -6.1683, 106.7588],
+  ['jakarta selatan|south jakarta', '31.74.04.1006', -6.2749, 106.8352],
+  ['jakarta timur|east jakarta', '31.75.01.1001', -6.2250, 106.9004],
+  ['bogor', '32.71.01.1001', -6.5950, 106.8166],
+  ['bandung', '32.73.01.1001', -6.9175, 107.6191],
+  ['bekasi', '32.75.01.1001', -6.2383, 106.9756],
+  ['depok', '32.76.03.1001', -6.4025, 106.7942],
+  ['tangerang', '36.71.01.1001', -6.1783, 106.6319],
+  ['tangerang selatan|south tangerang', '36.74.01.1001', -6.2886, 106.7179],
+  ['semarang', '33.74.01.1001', -6.9667, 110.4167],
+  ['surakarta|solo', '33.72.01.1001', -7.5755, 110.8243],
+  ['yogyakarta|jogja', '34.71.01.1001', -7.7956, 110.3695],
+  ['surabaya', '35.78.01.1001', -7.2575, 112.7521],
+  ['sidoarjo', '35.15.01.2001', -7.4478, 112.7183],
+  ['malang', '35.73.01.1001', -7.9666, 112.6326],
+  ['denpasar', '51.71.01.1001', -8.6705, 115.2126],
+  ['mataram', '52.71.02.1001', -8.5833, 116.1167],
+  ['kupang', '53.71.01.1001', -10.1772, 123.6070],
+  ['medan', '12.71.01.1001', 3.5952, 98.6722],
+  ['padang', '13.71.01.1001', -0.9471, 100.4172],
+  ['pekanbaru', '14.71.01.1002', 0.5071, 101.4478],
+  ['batam', '21.71.02.1001', 1.0456, 104.0305],
+  ['palembang', '16.71.01.1001', -2.9761, 104.7754],
+  ['bandar lampung', '18.71.03.1001', -5.4500, 105.2667],
+  ['pontianak', '61.71.01.1002', -0.0263, 109.3425],
+  ['banjarmasin', '63.71.01.1001', -3.3194, 114.5908],
+  ['balikpapan', '64.71.01.1001', -1.2379, 116.8529],
+  ['samarinda', '64.72.01.1001', -0.5022, 117.1536],
+  ['makassar', '73.71.01.1001', -5.1477, 119.4327],
+  ['manado', '71.71.01.1001', 1.4748, 124.8421],
+  ['ambon', '81.71.02.2001', -3.6954, 128.1814],
+  ['jayapura', '91.71.01.1001', -2.5337, 140.7181]
+];
+
+function bmkgPad(n){ return (n < 10 ? '0' : '') + n; }
+
+/* "YYYY-MM-DD HH:mm:ss" or "YYYY-MM-DDTHH:mm:ssZ" (both UTC in BMKG output) → epoch ms */
+function bmkgUtcMs(s){
+  var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(s || ''));
+  if(!m) return NaN;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+}
+/* epoch ms + zone offset (minutes) → "YYYY-MM-DDTHH:MM" local wall clock */
+function bmkgIso(ms, offMin){
+  var d = new Date(ms + offMin * 60000);
+  return d.getUTCFullYear() + '-' + bmkgPad(d.getUTCMonth() + 1) + '-' + bmkgPad(d.getUTCDate()) +
+    'T' + bmkgPad(d.getUTCHours()) + ':' + bmkgPad(d.getUTCMinutes());
+}
+function bmkgTemp(c, unit){
+  var f = String(unit || '').toLowerCase().charAt(0) === 'f';
+  return Math.round(f ? c * 9 / 5 + 32 : c);
+}
+function bmkgLoad(key){
+  var s, o = null;
+  try{ s = gs(key); o = s ? JSON.parse(s) : null; }catch(e){ o = null; }
+  return (o && typeof o === 'object') ? o : {};
+}
+function bmkgSave(key, obj){ try{ ss(key, JSON.stringify(obj)); }catch(e){} }
+
+/* BMKG text first: its numeric codes changed between the old XML feed and the
+   live JSON (61 means Light Rain now). Numbers are only a fallback. */
+function bmkgWmoFromText(s){
+  s = String(s || '').toLowerCase();
+  if(!s) return null;
+  if(/thunder|petir/.test(s)) return 95;
+  if(/(heavy|lebat)/.test(s) && /(rain|hujan)/.test(s)) return 65;
+  if(/(moderate|sedang)/.test(s) && /(rain|hujan)/.test(s)) return 63;
+  if(/(light|ringan)/.test(s) && /(rain|hujan)/.test(s)) return 61;
+  if(/(shower|isolated|lokal)/.test(s)) return 80;
+  if(/(rain|hujan)/.test(s)) return 63;
+  if(/(fog|kabut|haze|smoke|kabur|asap)/.test(s)) return 45;
+  if(/(overcast|berawan tebal)/.test(s)) return 3;
+  if(/(partly|cerah berawan)/.test(s)) return 2;
+  if(/(mostly cloudy|berawan)/.test(s)) return 3;
+  if(/(sunny|clear|cerah)/.test(s)) return 0;
+  return null;
+}
+var BMKG_NUM_TO_WMO = { 0:0, 1:0, 2:2, 3:3, 4:3, 5:45, 10:45, 45:45, 60:61, 61:61, 63:65, 80:80, 95:95, 97:95 };
+function bmkgWmo(code, desc){
+  var w = bmkgWmoFromText(desc);
+  if(w !== null) return w;
+  w = BMKG_NUM_TO_WMO[code];
+  return (typeof w === 'number') ? w : 3;
+}
+
+function bmkgNorm(s){
+  s = String(s || '').toLowerCase();
+  s = s.replace(/\b(kota|kabupaten|city|regency|administrasi)\b/g, ' ');
+  s = s.replace(/\bkab\b\.?/g, ' ');
+  s = s.replace(/[^a-z ]/g, ' ');
+  return s.replace(/\s+/g, ' ').replace(/^ | $/g, '');
+}
+function bmkgKm(la1, lo1, la2, lo2){
+  var R = Math.PI / 180, dLa = (la2 - la1) * R, dLo = (lo2 - lo1) * R;
+  var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) +
+    Math.cos(la1 * R) * Math.cos(la2 * R) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return 12742 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+/* geo = { city, cityName, lat, lon, cc, label, adm4? } — adm4 is an optional pin */
+function bmkgResolve(geo){
+  var names = [], i, j, row, aliases, best = null, bestKm = 1e9, km, lat, lon;
+  if(!geo) return null;
+  if(geo.adm4 && /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/.test(String(geo.adm4))) return { adm4:String(geo.adm4), by:'pinned' };
+  if(geo.cityName) names.push(bmkgNorm(geo.cityName));
+  if(geo.city) names.push(bmkgNorm(geo.city));
+  if(geo.label) names.push(bmkgNorm(String(geo.label).split(',')[0]));
+  for(i = 0; i < BMKG_CITIES.length; i++){
+    row = BMKG_CITIES[i];
+    aliases = row[0].split('|');
+    for(j = 0; j < names.length; j++){
+      if(names[j] && aliases.indexOf(names[j]) >= 0) return { adm4:row[1], by:'name' };
+    }
+  }
+  if(geo.lat !== null && geo.lat !== undefined && geo.lon !== null && geo.lon !== undefined){
+    lat = +geo.lat; lon = +geo.lon;
+    if(isFinite(lat) && isFinite(lon)){
+      for(i = 0; i < BMKG_CITIES.length; i++){
+        km = bmkgKm(lat, lon, BMKG_CITIES[i][2], BMKG_CITIES[i][3]);
+        if(km < bestKm){ bestKm = km; best = BMKG_CITIES[i]; }
+      }
+      if(best && bestKm <= BMKG_RADIUS_KM) return { adm4:best[1], by:'near' };
+    }
+  }
+  return null;
+}
+
+/* sunrise/sunset (BMKG has none): NOAA almanac, close to a minute for Jakarta */
+function bmkgSunUT(doy, lat, lon, rise){
+  var D = Math.PI / 180, lngH = lon / 15, t, M, L, RA, sinD, cosD, cosH, H, T;
+  t = doy + ((rise ? 6 : 18) - lngH) / 24;
+  M = 0.9856 * t - 3.289;
+  L = M + 1.916 * Math.sin(M * D) + 0.020 * Math.sin(2 * M * D) + 282.634;
+  L = ((L % 360) + 360) % 360;
+  RA = Math.atan(0.91764 * Math.tan(L * D)) / D;
+  RA = ((RA % 360) + 360) % 360;
+  RA = (RA + (Math.floor(L / 90) * 90 - Math.floor(RA / 90) * 90)) / 15;
+  sinD = 0.39782 * Math.sin(L * D);
+  cosD = Math.cos(Math.asin(sinD));
+  cosH = (Math.cos(90.833 * D) - sinD * Math.sin(lat * D)) / (cosD * Math.cos(lat * D));
+  if(cosH > 1 || cosH < -1) return null;
+  H = (rise ? 360 - Math.acos(cosH) / D : Math.acos(cosH) / D) / 15;
+  T = H + RA - 0.06571 * t - 6.622;
+  return (((T - lngH) % 24) + 24) % 24;
+}
+function bmkgSun(lat, lon, now, offMin){
+  var d = new Date(now + offMin * 60000), y = d.getUTCFullYear(), mo = d.getUTCMonth(), dd = d.getUTCDate();
+  var base = Date.UTC(y, mo, dd), doy = Math.floor((base - Date.UTC(y, 0, 0)) / 86400000);
+  var start = base - offMin * 60000, out = { rise:null, set:null }, ut;
+  function place(h){
+    var x = base + h * 3600000;
+    while(x < start) x += 86400000;
+    while(x >= start + 86400000) x -= 86400000;
+    return bmkgIso(x, offMin);
+  }
+  if(!isFinite(lat) || !isFinite(lon)) return out;
+  ut = bmkgSunUT(doy, lat, lon, true);  if(ut !== null) out.rise = place(ut);
+  ut = bmkgSunUT(doy, lat, lon, false); if(ut !== null) out.set = place(ut);
+  return out;
+}
+
+/* live shape: { data:[ { lokasi:{...}, cuaca:[ [slot,…], [slot,…], [slot,…] ] } ] } */
+function bmkgParse(json, adm4){
+  var d0 = json && json.data && json.data[0], days, flat = [], i, j, day, it, ms, lms, off = null, loc, slots = [], tz;
+  if(!d0 || !d0.cuaca || !d0.cuaca.length) throw new Error('bmkg-empty');
+  days = d0.cuaca;
+  for(i = 0; i < days.length; i++){
+    day = Object.prototype.toString.call(days[i]) === '[object Array]' ? days[i] : [days[i]];
+    for(j = 0; j < day.length; j++) flat.push(day[j]);
+  }
+  for(i = 0; i < flat.length; i++){
+    it = flat[i];
+    if(!it || typeof it.t !== 'number') continue;
+    ms = bmkgUtcMs(it.utc_datetime || it.datetime);
+    if(!isFinite(ms)) continue;
+    if(off === null && it.local_datetime){
+      lms = bmkgUtcMs(it.local_datetime);
+      if(isFinite(lms)) off = Math.round((lms - ms) / 60000);
+    }
+    slots.push({
+      ms:ms, t:it.t, w:+it.weather,
+      d:String(it.weather_desc_en || it.weather_desc || ''),
+      tp:+it.tp || 0, hu:+it.hu || 0
+    });
+  }
+  if(!slots.length) throw new Error('bmkg-empty');
+  slots.sort(function(a, b){ return a.ms - b.ms; });
+  loc = d0.lokasi || json.lokasi || {};
+  if(off === null){
+    tz = /^([+-])(\d{2}):?(\d{2})$/.exec(String(loc.timezone || ''));
+    off = tz ? (tz[1] === '-' ? -1 : 1) * (+tz[2] * 60 + +tz[3]) : 420;
+  }
+  return {
+    adm4:adm4, ts:Date.now(), off:off, slots:slots,
+    loc:{ desa:loc.desa || '', kecamatan:loc.kecamatan || '', kotkab:loc.kotkab || '', provinsi:loc.provinsi || '' }
+  };
+}
+function bmkgMergeSlots(prev, next, now){
+  var out = [], first = next.length ? next[0].ms : 0, i;
+  if(prev){
+    for(i = 0; i < prev.length; i++){
+      if(prev[i].ms >= now - 12 * 3600000 && prev[i].ms < first) out.push(prev[i]);
+    }
+  }
+  return out.concat(next);
+}
+function bmkgStore(adm4, entry){
+  var all = bmkgLoad(BMKG_KEY_RAW), keys = [], k, oldest, i;
+  all[adm4] = entry;
+  for(k in all){ if(Object.prototype.hasOwnProperty.call(all, k)) keys.push(k); }
+  while(keys.length > BMKG_MAX_CACHED){
+    oldest = keys[0];
+    for(i = 1; i < keys.length; i++){ if(all[keys[i]].ts < all[oldest].ts) oldest = keys[i]; }
+    delete all[oldest];
+    keys.splice(keys.indexOf(oldest), 1);
+  }
+  bmkgSave(BMKG_KEY_RAW, all);
+}
+function bmkgIsBad(adm4, now){
+  var b = bmkgLoad(BMKG_KEY_BAD)[adm4];
+  return !!(b && (now - b.ts) < b.ttl);
+}
+function bmkgMarkBad(adm4, err){
+  var all = bmkgLoad(BMKG_KEY_BAD), m = String((err && err.message) || err || '');
+  all[adm4] = { ts:Date.now(), ttl:(/\b(400|404|410)\b|bmkg-empty/.test(m)) ? BMKG_BAD_LONG_MS : BMKG_BAD_SHORT_MS };
+  bmkgSave(BMKG_KEY_BAD, all);
+}
+
+/* one request per adm4 at a time; cache shared across tabs via localStorage */
+function bmkgEntry(adm4, force){
+  var now = Date.now(), hit = bmkgLoad(BMKG_KEY_RAW)[adm4], ttlMin, usable, fresh;
+  ttlMin = Math.max(BMKG_RAW_TTL_MIN, Math.round((typeof weatherTTL === 'function' ? weatherTTL() : 1800000) / 60000) || 30);
+  usable = !!(hit && hit.slots && hit.slots.length && hit.slots[hit.slots.length - 1].ms > now);
+  fresh = usable && (now - hit.ts) < ttlMin * 60000;
+  if(fresh && !force) return Promise.resolve(hit);
+  if(usable && force && (now - hit.ts) < BMKG_MIN_GAP_MS) return Promise.resolve(hit);
+  if(bmkgIsBad(adm4, now)) return usable ? Promise.resolve(hit) : Promise.reject(new Error('bmkg-backoff'));
+  if(bmkgInflight[adm4]) return bmkgInflight[adm4];
+  bmkgInflight[adm4] = fetchJSON(BMKG_URL + encodeURIComponent(adm4), BMKG_TIMEOUT_MS).then(function(json){
+    var entry = bmkgParse(json, adm4), prev = bmkgLoad(BMKG_KEY_RAW)[adm4];
+    entry.slots = bmkgMergeSlots(prev && prev.slots, entry.slots, Date.now());
+    bmkgStore(adm4, entry);
+    return entry;
+  }).then(function(entry){
+    bmkgInflight[adm4] = null;
+    return entry;
+  }, function(err){
+    bmkgInflight[adm4] = null;
+    bmkgMarkBad(adm4, err);
+    if(usable) return hit;   /* stale but still covers "now": better than nothing */
+    throw err;
+  });
+  return bmkgInflight[adm4];
+}
+
+function bmkgRain(slots, now, off){
+  var out = { any:false, ms:0, hm:'', mm:0 }, i, s;
+  for(i = 0; i < slots.length; i++){
+    s = slots[i];
+    if(s.ms < now - 5400000 || s.ms > now + 86400000) continue;
+    if(bmkgWmo(s.w, s.d) >= 61){
+      out.any = true;
+      if(!out.ms){ out.ms = s.ms; out.hm = bmkgIso(s.ms, off).substr(11, 5); }
+      if(s.tp > out.mm) out.mm = s.tp;
+    }
+  }
+  return out;
+}
+/* BMKG reports millimetres of rain per slot, which means nothing to most people,
+   so the card and the hourly tiles say it in plain words instead. Each slot
+   already carries its own weather description, so use BMKG's own words; the
+   millimetre figure is only a fallback when there is no description. */
+function bmkgRainWord(code, mm){
+  var w = WMO[code];
+  if(Number(code) >= 61 && w && w[1]) return w[1];
+  var n = Number(mm);
+  if(!isFinite(n) || n <= 0) return 'Rain';
+  if(n < 2) return 'Light rain';
+  if(n < 10) return 'Rain';
+  return 'Heavy rain';
+}
+function bmkgRainLabel(d){
+  if(Number(d.rainMm) > 0) return bmkgRainWord(d.code, d.rainMm);
+  if(d.rainAt) return 'Rain later';
+  return 'No rain expected';
+}
+function bmkgToCache(entry, geo, unit, now){
+  var slots = entry.slots || [], off = entry.off, i, s, cur = null, best = 1e18, dd, today, dayS = [], winS = [];
+  var hi = -1e9, lo = 1e9, segs = [], rn, sun;
+  for(i = 0; i < slots.length; i++){
+    dd = Math.abs(slots[i].ms - now);
+    if(dd < best){ best = dd; cur = slots[i]; }
+  }
+  if(!cur || best > 4.5 * 3600000) return null;   /* stale: caller falls back to Open-Meteo */
+  today = bmkgIso(now, off).substr(0, 10);
+  for(i = 0; i < slots.length; i++){
+    s = slots[i];
+    if(bmkgIso(s.ms, off).substr(0, 10) === today) dayS.push(s);
+    if(s.ms >= now - 5400000 && s.ms <= now + 86400000) winS.push(s);
+  }
+  if(dayS.length < 4) dayS = winS;   /* BMKG drops past slots: use a rolling 24 h */
+  if(!dayS.length) dayS = [cur];
+  for(i = 0; i < dayS.length; i++){
+    if(dayS[i].t > hi) hi = dayS[i].t;
+    if(dayS[i].t < lo) lo = dayS[i].t;
+  }
+  for(i = 0; i < slots.length && segs.length < 4; i++){
+    s = slots[i];
+    if(s.ms > cur.ms){
+      segs.push({
+        lbl: bmkgIso(s.ms, off).substr(11, 2) + ':00',
+        temp: bmkgTemp(s.t, unit),
+        code: bmkgWmo(s.w, s.d),
+        rain: null,
+        rainMm: s.tp
+      });
+    }
+  }
+  rn = bmkgRain(slots, now, off);
+  /* The card line must agree with the current slot. BMKG can carry rain in a
+     later slot while the nearest one is dry, so the amount shown is the current
+     slot's own tp; a future chance becomes "Rain later" plus the note. */
+  var nowRain = Number(cur.tp) > 0 && bmkgWmo(cur.w, cur.d) >= 61;
+  sun = bmkgSun(+geo.lat, +geo.lon, now, off);
+  return {
+    v:2, city:geo.city, unit:unit, ts:now, cityName:geo.cityName, label:geo.label,
+    temp:bmkgTemp(cur.t, unit),
+    code:bmkgWmo(cur.w, cur.d),
+    rain:null, rainAbsent:!nowRain && !rn.any,
+    rainMm:nowRain ? Number(cur.tp) : 0,
+    rainAt:(!nowRain && rn.any) ? bmkgIso(rn.ms, off) : null,
+    rainHM:(!nowRain && rn.any) ? rn.hm : null,
+    rainAtP:null,
+    utcOffset:off * 60,
+    hi:bmkgTemp(hi, unit), lo:bmkgTemp(lo, unit),
+    sunrise:sun.rise, sunset:sun.set,
+    segs:segs,
+    src:'bmkg', adm4:entry.adm4, desc:cur.d
+  };
+}
+/* resolves with a ready-to-cache object, or rejects (never renders) → caller falls back */
+function bmkgWeather(geo, unit, force){
+  var hit;
+  if(!geo || String(geo.cc || '').toUpperCase() !== 'ID') return Promise.reject(new Error('bmkg-skip'));
+  hit = bmkgResolve(geo);
+  if(!hit) return Promise.reject(new Error('bmkg-noadm4'));
+  return bmkgEntry(hit.adm4, force).then(function(entry){
+    var d = bmkgToCache(entry, geo, unit, Date.now());
+    if(!d) throw new Error('bmkg-stale');
+    d.by = hit.by;
+    return d;
   });
 }
 
@@ -2586,6 +3416,7 @@ function loadWeather(force){
     setText($('w-unit'), (gs(K.weatherUnit) === 'f') ? 'F' : 'C');
     setText($('w-desc'),'Choose a city');
     setText($('w-rain'),'');
+    var emptySrc = $('w-src'); if(emptySrc) emptySrc.hidden = true;
     _rainAt = 0; _rainAtP = 0; _rainAbsent = false; _rainChance = null; renderRainNote();
     setText($('w-updated'),'');
     setWeatherStatus('No city chosen yet.');
@@ -2593,32 +3424,67 @@ function loadWeather(force){
   }
 
   var cache = parseJSON(gs(K.weatherCache),null);
-  if(!force && cache && cache.v === 2 && cache.city === city && cache.unit === unit && (Date.now() - cache.ts) < weatherTTL()){
+  var geoNow = parseJSON(gs(K.weatherGeo), null);
+  var geoCountry = (geoNow && geoNow.city === city && geoNow.cc) ? String(geoNow.cc).toUpperCase() : '';
+  var cacheMatches = !!(cache && cache.v === 2 && cache.city === city && cache.unit === unit);
+  var cacheFresh = cacheMatches && (Date.now() - cache.ts) < weatherTTL();
+  /* An Indonesian city belongs on BMKG, so a plain Open-Meteo cache must not
+     stop the first BMKG attempt. A geo saved before country codes existed also
+     has to be refreshed, otherwise BMKG is skipped forever. */
+  var cacheOwned = !!(cacheMatches && ((cache.src === 'bmkg') ||
+    (geoCountry && geoCountry !== 'ID')));
+  if(cacheFresh && cacheOwned && !force){
     renderWeather(cache);
-    setWeatherStatus(cache.label + ' · cached');
+    setWeatherStatus(cache.label + ' \u00b7 cached');
     return null;
   }
 
-  /* first open has nothing cached — fill every line so the card never looks broken */
-  setText($('w-city'), city);
-  setText($('w-icon'), '·');
-  setText($('w-temp'), '--');
-  setText($('w-unit'), (unit === 'f') ? 'F' : 'C');
-  setText($('w-desc'), 'Gathering the forecast from Open-Meteo…');
-  setText($('w-rain'), '');
-  setText($('w-raintime'), '');
-  setText($('w-updated'), 'If this lingers, your connection may be resting.');
-  _rainAt = 0; _rainAtP = 0; _rainAbsent = false; _rainChance = null;
+  /* Stale-while-revalidate: show whatever we already know instead of a tiny
+     "Updating..." placeholder. The card keeps its size while the fetch runs,
+     which is what made it jump after five minutes or on the next day. */
+  if(cacheMatches){
+    renderWeather(cache);
+    setWeatherStatus(cache.label + ' \u00b7 updating\u2026');
+  } else {
+    /* genuinely first open: fill every line so the card never looks broken */
+    setText($('w-city'), city);
+    setText($('w-icon'), '\u00b7');
+    setText($('w-temp'), '--');
+    setText($('w-unit'), (unit === 'f') ? 'F' : 'C');
+    setText($('w-desc'), 'Updating...');
+    setText($('w-rain'), '');
+    setText($('w-raintime'), '');
+    setText($('w-updated'), 'If this lingers, your connection may be resting.');
+    _rainAt = 0; _rainAtP = 0; _rainAbsent = false; _rainChance = null;
+  }
 
   /* one request at a time worth showing: the newest one owns the busy state */
   var req = ++_weatherReq;
   setWeatherBusy(true);
 
   var geo = parseJSON(gs(K.weatherGeo),null);
-  var geoP = (geo && geo.city === city && geo.lat != null) ? Promise.resolve(geo) : geocode(city);
+  /* a geo saved before country codes existed must be refreshed, or BMKG is
+     skipped forever for Indonesian cities */
+  var geoP = (geo && geo.city === city && geo.lat != null && geo.lon != null && geo.cc)
+    ? Promise.resolve(geo) : geocode(city);
 
   geoP.then(function(g){
     ss(K.weatherGeo,JSON.stringify(g));
+    /* Indonesia first: BMKG by adm4, then the same Open-Meteo path as before.
+       Every BMKG failure resolves to null, so this can never break the card. */
+    var viaBmkg = (String(g.cc || '').toUpperCase() === 'ID')
+      ? bmkgWeather(g, unit, force).then(null, function(e){
+          try{ console.info('BMKG unavailable:', (e && e.message) || e); }catch(_e){}
+          return null;
+        })
+      : Promise.resolve(null);
+    return viaBmkg.then(function(bd){
+      if(bd){
+        ss(K.weatherCache,JSON.stringify(bd));
+        renderWeather(bd);
+        setWeatherStatus(bd.label + ' \u00b7 BMKG');
+        return bd;
+      }
     var u = 'https://api.open-meteo.com/v1/forecast?latitude=' + g.lat + '&longitude=' + g.lon +
             '&current=temperature_2m,weather_code,precipitation,rain' +
             '&hourly=precipitation_probability,precipitation,rain,temperature_2m,weather_code' +
@@ -2695,8 +3561,9 @@ function loadWeather(force){
       };
       ss(K.weatherCache,JSON.stringify(d));
       renderWeather(d);
-      setWeatherStatus(d.label + ' · updated');
+      setWeatherStatus(d.label + ' · Open-Meteo');
       return d;
+    });
     });
   }).catch(function(err){
     if(err && err.code === 'CITY_NOT_FOUND'){
@@ -2706,12 +3573,14 @@ function loadWeather(force){
       setText($('w-desc'), 'City not found \u2014 check the spelling');
       setText($('w-updated'), 'A nearby bigger town, or the country, often helps.');
       setWeatherStatus('City not found \u2014 check the spelling.');
+      var noSrc = $('w-src'); if(noSrc) noSrc.hidden = true;
       return null;
     }
     if(cache && cache.city === city) renderWeather(cache);
     else{
       setText($('w-desc'), 'Open-Meteo is quiet right now');
       setText($('w-updated'), 'A quick connection check should help.');
+      var quietSrc = $('w-src'); if(quietSrc) quietSrc.hidden = true;
     }
     setWeatherStatus('Couldn\u2019t load the weather. A quick connection check should help.');
     return null;
@@ -2734,6 +3603,552 @@ function startWeatherTimer(){
     if(document.hidden) return;
     loadWeather(true);
   }, weatherTTL());
+}
+
+/* ══════════════════════════════════════════
+   STOCKS  (watchlist via Yahoo Finance chart endpoint — keyless, delayed)
+   Refreshes on a slow loop while visible and pauses with the tab.
+══════════════════════════════════════════ */
+var STOCKS_DEFAULT = ['^JKSE','BBCA.JK','AAPL','MSFT'];
+var CRYPTO_DEFAULT = ['BTC-USD','ETH-USD','SOL-USD','XRP-USD'];
+/* Currencies offered for display conversion — the famous ones only. "Native"
+   keeps every symbol in its own currency, which is the calm default. Rates come
+   from open.er-api.com (keyless, CORS `*`, so no host permission is needed). */
+var STOCK_CURRENCIES = [
+  ['native','Native (each symbol)'],
+  ['IDR','IDR · Rupiah'],
+  ['USD','USD · US Dollar'],
+  ['EUR','EUR · Euro'],
+  ['GBP','GBP · Pound'],
+  ['JPY','JPY · Yen'],
+  ['CNY','CNY · Yuan'],
+  ['AUD','AUD · Australian Dollar'],
+  ['SGD','SGD · Singapore Dollar'],
+  ['INR','INR · Rupee'],
+  ['MYR','MYR · Ringgit'],
+  ['KRW','KRW · Won'],
+  ['HKD','HKD · Hong Kong Dollar'],
+  ['THB','THB · Baht'],
+  ['PHP','PHP · Peso'],
+  ['CAD','CAD · Canadian Dollar'],
+  ['CHF','CHF · Franc']
+];
+var FX_TTL = 6 * 60 * 60 * 1000;
+var _fxRates = null, _fxReq = null;
+function stocksCurrency(){
+  var c = String(gs(K.stocksCurrency) || 'native').toUpperCase();
+  for(var i = 0; i < STOCK_CURRENCIES.length; i++){
+    if(STOCK_CURRENCIES[i][0] === c) return STOCK_CURRENCIES[i][0];
+  }
+  return 'native';
+}
+function fxCache(){
+  if(_fxRates) return _fxRates;
+  var c = parseJSON(gs(K.fxCache), null);
+  if(c && c.rates) _fxRates = c;
+  return _fxRates;
+}
+/* every rate is "X per 1 USD", so from→to is rates[to] / rates[from] */
+function fxRate(from, to){
+  from = String(from || '').toUpperCase();
+  to = String(to || '').toUpperCase();
+  if(!from || !to) return null;
+  if(from === to) return 1;
+  var c = fxCache();
+  if(!c || !c.rates) return null;
+  var a = Number(c.rates[from]), b = Number(c.rates[to]);
+  if(!(a > 0) || !(b > 0)) return null;
+  return b / a;
+}
+function ensureFxRates(){
+  if(stocksCurrency() === 'native') return null;
+  var c = fxCache();
+  if(c && c.rates && (Date.now() - c.ts) < FX_TTL) return Promise.resolve(c);
+  if(_fxReq) return _fxReq;
+  _fxReq = fetchJSON('https://open.er-api.com/v6/latest/USD', 9000).then(function(j){
+    _fxReq = null;
+    if(!j || j.result !== 'success' || !j.rates) throw new Error('fx-failed');
+    var out = { ts: Date.now(), rates: j.rates };
+    _fxRates = out;
+    ss(K.fxCache, JSON.stringify(out));
+    /* rates landed after the prices — repaint with the converted values */
+    var cache = parseJSON(gs(K.stocksCache), null);
+    if(cache){ renderStocks(cache); renderStocksWindow(cache); }
+    return out;
+  }).catch(function(e){
+    _fxReq = null;
+    /* leave the native prices in place and try again on the next refresh */
+    return null;
+  });
+  return _fxReq;
+}
+/* the displayed number: original, or converted to the chosen currency */
+function stockPriceText(r){
+  var price = (r && r.price != null) ? Number(r.price) : NaN;
+  if(!isFinite(price)) return '\u2014';
+  var target = stocksCurrency();
+  if(target !== 'native'){
+    var rate = fxRate(r && r.cur, target);
+    if(rate != null) return fmtStockPrice(price * rate);
+  }
+  return fmtStockPrice(price);
+}
+/* the small currency tag after the number; blank when nothing was converted */
+function stockCurrencyTag(r){
+  var target = stocksCurrency();
+  if(target === 'native') return '';
+  var rate = fxRate(r && r.cur, target);
+  return rate != null ? target : '';
+}
+function stocksOn(){ return gs(K.showStocks) === '1'; }
+function stocksMarket(){
+  return gs(K.stocksMarket) === 'crypto' ? 'crypto' : 'stock';
+}
+function stocksListKey(){
+  return stocksMarket() === 'crypto' ? K.cryptoList : K.stocksList;
+}
+function stocksDefaults(){
+  return stocksMarket() === 'crypto' ? CRYPTO_DEFAULT : STOCKS_DEFAULT;
+}
+function stocksList(){
+  var raw = parseJSON(gs(stocksListKey()), null);
+  if(!raw || !raw.length) raw = stocksDefaults().slice();
+  return raw.map(function(s){ return String(s).trim().toUpperCase(); })
+            .filter(validStockSymbol).slice(0, 8);
+}
+function stocksEveryMin(){
+  var m = parseInt(gs(K.stocksEvery), 10);
+  if(!(m > 0)) m = 5;
+  return Math.max(1, Math.min(60, m));
+}
+function stockLabel(sym){
+  var map = { '^JKSE':'IHSG', '^GSPC':'S&P 500', '^IXIC':'Nasdaq', '^DJI':'Dow' };
+  if(map[sym]) return map[sym];
+  if(/-USD$/.test(sym)) return String(sym).replace(/-USD$/, '');
+  return String(sym || '').replace(/\.JK$/, '');
+}
+function validStockSymbol(sym){
+  return /^[A-Z0-9.\-=^]{1,14}$/.test(sym);
+}
+function fmtStockPrice(v){
+  if(v == null || !isFinite(v)) return '\u2014';
+  var a = Math.abs(v), d;
+  if(a >= 1000) d = 0;
+  else if(a >= 1) d = 2;
+  else if(a >= 0.01) d = 4;
+  else d = 6;
+  try{ return Number(v).toLocaleString(undefined, { minimumFractionDigits:d, maximumFractionDigits:d }); }
+  catch(e){ return Number(v).toFixed(d); }
+}
+function stockSpark(closes){
+  var vals = [];
+  for(var i = 0; i < closes.length; i++){
+    var v = Number(closes[i]);
+    if(isFinite(v)) vals.push(v);
+  }
+  if(vals.length < 2) return '';
+  var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  var span = (max - min) || 1;
+  var w = 52, h = 16, pts = [];
+  for(var k = 0; k < vals.length; k++){
+    var x = (k / (vals.length - 1)) * w;
+    var y = h - ((vals[k] - min) / span) * (h - 2) - 1;
+    pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+  }
+  var up = vals[vals.length - 1] >= vals[0];
+  return '<svg class="sk-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true">' +
+         '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + (up ? '#7fe0a8' : '#ff9aa4') +
+         '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
+function setStocksNote(msg){
+  var n = $('sk-note');
+  if(n) setText(n, msg || 'Live');
+}
+function stocksHasOpen(data){
+  var rows = (data && data.rows) || [];
+  for(var i = 0; i < rows.length; i++){
+    if(rows[i] && rows[i].open) return true;
+  }
+  return false;
+}
+/* the source label tells the truth: crypto trades non-stop, stocks only while
+   their exchange session is open, and a failed refresh keeps the last close. */
+function applyStocksLabels(data){
+  var crypto = stocksMarket() === 'crypto';
+  var note, sub;
+  if(data && data.rateLimited){
+    note = 'Busy'; sub = 'Yahoo is rate-limiting \u00b7 showing the last close';
+  } else if(data && data.offline){
+    note = 'Offline'; sub = 'Offline \u00b7 showing the last close';
+  } else if(data && data.rows && data.rows.length && stocksPricedRows(data) === 0){
+    note = 'Updating\u2026'; sub = 'Yahoo Finance';
+  } else if(crypto){
+    note = 'Live'; sub = 'Live \u00b7 Yahoo Finance';
+  } else if(stocksHasOpen(data)){
+    note = 'Delayed'; sub = 'Delayed \u00b7 Yahoo Finance';
+  } else {
+    note = 'Closed'; sub = 'Last close \u00b7 Yahoo Finance';
+  }
+  var n = $('sk-note');
+  if(n) setText(n, note);
+  var ws = $('stockswin-sub');
+  if(ws) setText(ws, sub);
+  var wsrc = $('stockswin-src');
+  var src = stocksCurrency() === 'native' ? 'Source: Yahoo Finance'
+    : 'Source: Yahoo Finance \u00b7 ' + stocksCurrency() + ' via er-api';
+  if(wsrc) setText(wsrc, src);
+  var cardSrc = $('sk-src');
+  if(cardSrc) setText(cardSrc, 'Source: Yahoo Finance');
+}
+function renderStocks(data){
+  var host = $('sk-list');
+  if(!host) return;
+  var rows = (data && data.rows) || [];
+  if(!rows.length){
+    host.innerHTML = '<div class="sk-empty">Add a few symbols in Settings.</div>';
+    applyStocksLabels(data);
+    applySizeScale('stocks');
+    return;
+  }
+  var html = '';
+  rows.forEach(function(r){
+    var has = r.price != null && isFinite(r.price);
+    var up = Number(r.pct || 0) >= 0;
+    var pct = has ? ((up ? '+' : '') + Number(r.pct || 0).toFixed(2) + '%') : '\u2014';
+    html += '<div class="sk-row' + (r.stale ? ' stale' : '') + '"' + (r.stale ? ' title="Last known price"' : '') + '>' +
+      '<span class="sk-sym" title="' + holEsc(r.name || r.symbol) + '">' + holEsc(stockLabel(r.symbol)) + '</span>' +
+      '<span class="sk-px">' + holEsc(stockPriceText(r)) + (stockCurrencyTag(r) ? '<span class="sk-cur">' + stockCurrencyTag(r) + '</span>' : '') + '</span>' +
+      '<span class="sk-spark-slot">' + stockSpark(r.spark || []) + '</span>' +
+      '<span class="sk-chg ' + (has ? (up ? 'up' : 'down') : 'flat') + '">' +
+        (has ? (up ? '\u25B2' : '\u25BC') + ' ' : '') + pct + '</span>' +
+    '</div>';
+  });
+  host.innerHTML = html;
+  applyStocksLabels(data);
+  /* fixed base => --wbw never follows the latest price width, so symbols stay
+     visible and the numbers scale with the card instead of overlapping */
+  applySizeScale('stocks');
+}
+var _stockReq = 0;
+var _stocksRetry = null;
+function scheduleStocksRetry(ms){
+  if(_stocksRetry) return;
+  _stocksRetry = setTimeout(function(){
+    _stocksRetry = null;
+    if(!stocksOn() || !isShown('stocks')) return;
+    loadStocks(true);
+  }, ms || 45000);
+}
+function stocksPricedRows(data){
+  var rows = (data && data.rows) || [], n = 0;
+  for(var i = 0; i < rows.length; i++){
+    if(rows[i] && rows[i].price != null && isFinite(rows[i].price)) n++;
+  }
+  return n;
+}
+function stockSessionOpen(meta){
+  var reg = meta && meta.currentTradingPeriod && meta.currentTradingPeriod.regular;
+  if(!reg || !reg.start || !reg.end) return null;
+  var now = Math.floor(Date.now() / 1000);
+  if(now < reg.start) return false;
+  return now <= reg.end;
+}
+function loadStocks(force){
+  if(!stocksOn() || !isShown('stocks')) return null;
+  var list = stocksList();
+  var cache = parseJSON(gs(K.stocksCache), null);
+  var same = !!(cache && cache.market === stocksMarket() && cache.symbols === list.join(','));
+  var fresh = !!(same && cache.ts && !cache.offline && stocksPricedRows(cache) > 0 &&
+    (Date.now() - cache.ts) < stocksEveryMin() * 60000);
+  if(fresh && !force){
+    renderStocks(cache);
+    renderStocksWindow(cache);
+    return null;
+  }
+  /* Stale-while-revalidate: paint the last watchlist immediately, then update
+     it in place. The old code blanked the card, so its measured base shrank and
+     the grid columns collapsed when the data finally arrived. */
+  if(same && cache.rows && cache.rows.length){
+    renderStocks(cache);
+    renderStocksWindow(cache);
+  }
+  var req = ++_stockReq;
+  setStocksNote('Updating\u2026');
+  var jobs = list.map(function(sym, idx){
+    var u = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+            encodeURIComponent(sym) + '?range=1d&interval=15m';
+    /* stagger the requests a little; Yahoo starts answering 429 when a new tab
+       fires the whole watchlist at once */
+    return new Promise(function(res){ setTimeout(res, idx * 400); }).then(function(){
+      return fetchJSON(u, 9000).then(function(j){
+        var r = j && j.chart && j.chart.result && j.chart.result[0];
+        if(!r || !r.meta) throw new Error('no data');
+        var meta = r.meta;
+        var q = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {};
+        var closes = q.close || [];
+        var price = Number(meta.regularMarketPrice);
+        var prev = Number(meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose);
+        /* markets can drop regularMarketPrice between sessions; the last real
+           close in the series is still a valid answer */
+        if(!isFinite(price) || price === 0){
+          for(var ci = closes.length - 1; ci >= 0; ci--){
+            var cv = Number(closes[ci]);
+            if(isFinite(cv) && cv !== 0){ price = cv; break; }
+          }
+        }
+        var pct = (meta.regularMarketChangePercent != null)
+          ? Number(meta.regularMarketChangePercent)
+          : ((isFinite(price) && isFinite(prev) && prev !== 0) ? ((price - prev) / prev) * 100 : 0);
+        return {
+          symbol: sym,
+          price: (isFinite(price) && price !== 0) ? price : null,
+          pct: isFinite(pct) ? pct : 0,
+          cur: meta.currency || '',
+          name: meta.shortName || meta.symbol || sym,
+          open: stockSessionOpen(meta),
+          spark: closes.slice(-26)
+        };
+      }).catch(function(e){
+        return { symbol: sym, price: null, pct: 0, cur: '', name: sym, open: null, spark: [], failed: true,
+                 err: String((e && e.message) || '') };
+      });
+    });
+  });
+  return Promise.all(jobs).then(function(rows){
+    if(req !== _stockReq) return;
+    var oldBy = {};
+    if(same && cache.rows){
+      cache.rows.forEach(function(r){ if(r && r.symbol) oldBy[r.symbol] = r; });
+    }
+    var fresh = 0, merged = rows.map(function(r){
+      if(r.price != null && isFinite(r.price)){ fresh++; return r; }
+      var old = oldBy[r.symbol];
+      if(old && old.price != null && isFinite(old.price)){
+        r.price = old.price; r.pct = old.pct; r.cur = old.cur; r.name = old.name;
+        r.open = old.open; r.spark = old.spark || []; r.stale = true;
+        delete r.failed;
+      }
+      return r;
+    });
+    if(!fresh){
+      /* every symbol failed: keep whatever we showed before and try again
+         soon, instead of blanking the card for a full refresh interval */
+      var limited = false, i;
+      for(i = 0; i < merged.length; i++){
+        if(/429/.test(merged[i].err || '')) limited = true;
+      }
+      var view = {
+        ts: (same && cache.ts) || Date.now(),
+        market: stocksMarket(), symbols: list.join(','),
+        rows: merged, offline: true, rateLimited: limited
+      };
+      renderStocks(view);
+      renderStocksWindow(view);
+      scheduleStocksRetry(limited ? 300000 : 45000);
+      return;
+    }
+    var out = { ts: Date.now(), market: stocksMarket(), symbols: list.join(','), rows: merged };
+    ss(K.stocksCache, JSON.stringify(out));
+    renderStocks(out);
+    renderStocksWindow(out);
+    if(_stocksRetry){ clearTimeout(_stocksRetry); _stocksRetry = null; }
+    syncStocksUI();
+  });
+}
+var _stocksTimer = null;
+function startStocksTimer(){
+  if(_stocksTimer){ clearInterval(_stocksTimer); _stocksTimer = null; }
+  if(!stocksOn() || !isShown('stocks')) return;
+  _stocksTimer = setInterval(function(){
+    if(document.hidden) return;
+    loadStocks(true);
+  }, stocksEveryMin() * 60000);
+}
+/* rows for the window: fall back to the saved symbol list before data lands */
+function stocksRowsFor(data){
+  var rows = (data && data.rows) || [];
+  if(rows.length) return rows;
+  return stocksList().map(function(s){
+    return { symbol:s, price:null, pct:0, name:s, spark:[] };
+  });
+}
+function renderStocksWindow(data){
+  var host = $('stockswin-list');
+  if(!host) return;
+  var rows = stocksRowsFor(data);
+  if(!rows.length){
+    host.innerHTML = '<div class="sk-win-empty">No symbols yet \u2014 add one below.</div>';
+    return;
+  }
+  var html = '';
+  rows.forEach(function(r){
+    var has = r.price != null && isFinite(r.price);
+    var up = Number(r.pct || 0) >= 0;
+    var pct = has ? ((up ? '+' : '') + Number(r.pct || 0).toFixed(2) + '%') : '\u2014';
+    html += '<div class="sk-win-row' + (r.stale ? ' stale' : '') + '">' +
+      '<div class="sk-win-id">' +
+        '<span class="sk-win-sym">' + holEsc(stockLabel(r.symbol)) + '</span>' +
+        '<span class="sk-win-name">' + holEsc(r.name || r.symbol) + '</span>' +
+      '</div>' +
+      '<div class="sk-win-num">' +
+        '<span class="sk-win-px">' + holEsc(stockPriceText(r)) + (stockCurrencyTag(r) ? '<span class="sk-cur">' + stockCurrencyTag(r) + '</span>' : '') + '</span>' +
+        '<span class="sk-chg ' + (has ? (up ? 'up' : 'down') : 'flat') + '">' +
+          (has ? (up ? '\u25B2' : '\u25BC') + ' ' : '') + pct + '</span>' +
+      '</div>' +
+      '<span class="sk-spark-slot">' + stockSpark(r.spark || []) + '</span>' +
+      '<button class="sk-remove" type="button" data-sym="' + holEsc(r.symbol) + '" title="Remove" aria-label="Remove ' + holEsc(r.symbol) + '">\u2715</button>' +
+    '</div>';
+  });
+  host.innerHTML = html;
+  applyStocksLabels(data);
+}
+function syncStocksUI(){
+  var crypto = stocksMarket() === 'crypto';
+  var t = $('sk-title'); if(t) setText(t, crypto ? 'Crypto' : 'Markets');
+  var wt = $('stockswin-title'); if(wt) setText(wt, crypto ? 'Crypto' : 'Markets');
+  function segPaint(id){
+    var s = $(id);
+    if(!s) return;
+    Array.prototype.forEach.call(s.querySelectorAll('.seg-btn'), function(b){
+      b.classList.toggle('on', b.getAttribute('data-market') === stocksMarket());
+    });
+  }
+  segPaint('istocksmarket');
+  segPaint('stockswin-market');
+  var sl = $('istockslist');
+  if(sl){
+    /* never rewrite the field while the user is editing it */
+    if(document.activeElement !== sl) sl.value = stocksList().join(', ');
+    sl.placeholder = crypto ? 'BTC-USD, ETH-USD' : '^JKSE, BBCA.JK, AAPL';
+  }
+  var sev = $('istocksevery');
+  if(sev && document.activeElement !== sev) sev.value = String(stocksEveryMin());
+  var wev = $('stockswin-every');
+  if(wev && document.activeElement !== wev) wev.value = String(stocksEveryMin());
+  var inp = $('stockswin-input');
+  if(inp) inp.placeholder = crypto ? 'Add symbol, e.g. DOGE-USD' : 'Add symbol, e.g. NVDA';
+  var cur = stocksCurrency();
+  var selA = $('istockscurrency'), selB = $('stockswin-currency');
+  if(selA && selA.value !== cur) selA.value = cur;
+  if(selB && selB.value !== cur) selB.value = cur;
+  if(cur !== 'native') ensureFxRates();
+  var cache = parseJSON(gs(K.stocksCache), null);
+  var upd = $('stockswin-updated');
+  if(upd){
+    if(cache && cache.ts && cache.market === stocksMarket()){
+      var dt = new Date(cache.ts);
+      upd.textContent = pad2n(dt.getHours()) + ':' + pad2n(dt.getMinutes());
+    } else {
+      upd.textContent = '\u2014';
+    }
+  }
+  applyStocksLabels(cache && cache.market === stocksMarket() ? cache : null);
+}
+function setStocksMarket(m){
+  ss(K.stocksMarket, m === 'crypto' ? 'crypto' : 'stock');
+  ss(K.stocksCache, '');
+  syncStocksUI();
+  loadStocks(true);
+  startStocksTimer();
+}
+function setStocksCurrency(c){
+  ss(K.stocksCurrency, c || 'native');
+  if(stocksCurrency() !== 'native') ensureFxRates();
+  var cache = parseJSON(gs(K.stocksCache), null);
+  if(cache){ renderStocks(cache); renderStocksWindow(cache); }
+  syncStocksUI();
+}
+function populateCurrencySelects(){
+  ['istockscurrency','stockswin-currency'].forEach(function(id){
+    var sel = $(id);
+    if(!sel) return;
+    sel.innerHTML = STOCK_CURRENCIES.map(function(c){
+      return '<option value="' + c[0] + '">' + c[1] + '</option>';
+    }).join('');
+    sel.value = stocksCurrency();
+  });
+}
+function addStockSymbol(sym){
+  sym = String(sym || '').trim().toUpperCase();
+  if(!validStockSymbol(sym)) return false;
+  var list = stocksList();
+  if(list.indexOf(sym) >= 0 || list.length >= 8) return false;
+  list.push(sym);
+  ss(stocksListKey(), JSON.stringify(list));
+  ss(K.stocksCache, '');
+  renderStocksWindow(null);
+  loadStocks(true);
+  syncStocksUI();
+  return true;
+}
+function removeStockSymbol(sym){
+  var list = stocksList();
+  if(list.length <= 1) return;
+  var i = list.indexOf(String(sym || '').toUpperCase());
+  if(i < 0) return;
+  list.splice(i, 1);
+  ss(stocksListKey(), JSON.stringify(list));
+  ss(K.stocksCache, '');
+  renderStocksWindow(null);
+  loadStocks(true);
+  syncStocksUI();
+}
+function openStocks(){
+  if(!stocksOn()) return;
+  openWin('stocks-modal');
+  var cache = parseJSON(gs(K.stocksCache), null);
+  renderStocksWindow(cache && cache.market === stocksMarket() ? cache : null);
+  syncStocksUI();
+  loadStocks(false);
+}
+function initStocks(){
+  var tile = $('stocks');
+  if(tile) tile.addEventListener('click', function(e){
+    if(_layoutEditing) return;
+    if(Date.now() - _lastDragEnd < 300) return;
+    if(e.target.closest('#stocks-refresh') || e.target.closest('.resize-knob') || e.target.closest('.reset-knob')) return;
+    openStocks();
+  });
+  var cb = $('stockswin-close');
+  if(cb) cb.onclick = function(){ closeWin('stocks-modal'); };
+  var market = $('stockswin-market');
+  if(market) market.addEventListener('click', function(e){
+    var b = e.target.closest('.seg-btn');
+    if(!b) return;
+    setStocksMarket(b.getAttribute('data-market'));
+  });
+  var addBtn = $('stockswin-add'), inp = $('stockswin-input');
+  function doAdd(){
+    if(!inp) return;
+    addStockSymbol(inp.value);
+    inp.value = '';
+  }
+  if(addBtn) addBtn.onclick = doAdd;
+  if(inp) inp.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); doAdd(); } };
+  var list = $('stockswin-list');
+  if(list) list.addEventListener('click', function(e){
+    var b = e.target.closest('.sk-remove');
+    if(!b) return;
+    removeStockSymbol(b.getAttribute('data-sym'));
+  });
+  var rf = $('stockswin-refresh');
+  if(rf) rf.onclick = function(){ loadStocks(true); };
+  populateCurrencySelects();
+  var wcur = $('stockswin-currency');
+  if(wcur) wcur.onchange = function(){ setStocksCurrency(wcur.value); };
+  var wev = $('stockswin-every');
+  if(wev){
+    var commitW = function(){
+      var m = parseInt(wev.value, 10);
+      if(!(m > 0)) m = 5;
+      m = Math.max(1, Math.min(60, m));
+      ss(K.stocksEvery, String(m));
+      startStocksTimer();
+      syncStocksUI();
+    };
+    wev.onchange = commitW;
+    wev.onblur = commitW;
+  }
 }
 
 /* ══════════════════════════════════════════
@@ -3115,6 +4530,123 @@ function initStatus(){
 }
 
 /* ══════════════════════════════════════════
+   PUBLIC HOLIDAYS  (opt-in; keyless via Nager.Date)
+   Follows the weather city's country when we know it, and can be pinned
+   to one country in Settings. Pure nicety: any failure stays silent.
+══════════════════════════════════════════ */
+function holidaysOn(){ return gs(K.showHolidays) === '1'; }
+function holidayRegion(){
+  var own = (gs(K.holidayCountry) || '').toUpperCase();
+  if(own) return own;
+  var geo = parseJSON(gs(K.weatherGeo), null);
+  if(geo && geo.cc) return geo.cc;
+  return 'ID';
+}
+function holEsc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+var _holidays = parseJSON(gs(K.holidayCache), null) || {};
+var _holidayReq = {};
+function holidayFor(y,m,d){
+  var region = holidayRegion();
+  var year = _holidays[region] && _holidays[region][y];
+  if(!year) return null;
+  return year[y + '-' + pad2n(m + 1) + '-' + pad2n(d)] || null;
+}
+/* every marked day in a month, in date order, for the visible name lists */
+function holidaysInMonth(y,m){
+  if(!holidaysOn()) return [];
+  var out = [], days = new Date(y, m + 1, 0).getDate();
+  for(var d = 1; d <= days; d++){
+    var h = holidayFor(y, m, d);
+    if(h) out.push({ d:d, name:(h.local || h.name) });
+  }
+  return out;
+}
+var NAGER_HOL = 'https://date.nager.at/api/v3/PublicHolidays/';
+var ID_HOL = 'https://raw.githubusercontent.com/guangrei/APIHariLibur_V2/main/holidays.json';
+var _idHolState = '';   /* '' | 'loading' | 'done' | 'fail' */
+function holidaysChanged(){
+  renderCalendar();
+  if(_openWin === 'calendar-modal') renderCalWin(false);
+}
+/* Indonesia keeps its own list: Nager only carries a handful of ID days,
+   while this small community dataset has the full SKB calendar. */
+function fetchIDHolidays(year){
+  if(_idHolState === 'loading') return;
+  _idHolState = 'loading';
+  fetchJSON(ID_HOL, 12000).then(function(map){
+    if(!map || typeof map !== 'object') throw new Error('empty');
+    var byYear = {}, seen = false;
+    Object.keys(map).forEach(function(k){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(k)) return;
+      var item = map[k] || {};
+      var y = k.slice(0, 4);
+      if(!byYear[y]) byYear[y] = {};
+      byYear[y][k] = { name: item.summary || '', local: item.summary || '' };
+      seen = true;
+    });
+    if(!seen) throw new Error('empty');
+    _holidays.ID = byYear;
+    ss(K.holidayCache, JSON.stringify(_holidays));
+    _idHolState = 'done';
+    holidaysChanged();
+    if(!_holidays.ID[year]) fetchNagerHolidays(year);
+  }).catch(function(){
+    _idHolState = 'fail';
+    fetchNagerHolidays(year);
+  });
+}
+function fetchNagerHolidays(year){
+  var region = holidayRegion();
+  var tag = region + '|' + year;
+  if(_holidayReq[tag]) return;
+  _holidayReq[tag] = true;
+  fetchJSON(NAGER_HOL + year + '/' + region, 9000)
+    .then(function(list){
+      if(!list || !list.length) throw new Error('empty');
+      var map = {};
+      list.forEach(function(h){
+        if(!h || !h.date) return;
+        /* a holiday shared by a sub-region is not a nationwide day off */
+        if(h.global === false) return;
+        map[h.date] = { name: h.name || '', local: h.localName || '' };
+      });
+      if(!_holidays[region]) _holidays[region] = {};
+      _holidays[region][year] = map;
+      ss(K.holidayCache, JSON.stringify(_holidays));
+      holidaysChanged();
+    })
+    .catch(function(){
+      /* remember the miss so we do not hammer the endpoint */
+      if(!_holidays[region]) _holidays[region] = {};
+      _holidays[region][year] = {};
+      ss(K.holidayCache, JSON.stringify(_holidays));
+    })
+    .then(function(){ _holidayReq[tag] = false; });
+}
+function ensureHolidays(year){
+  if(!holidaysOn()) return;
+  var region = holidayRegion();
+  if(_holidays[region] && _holidays[region][year]) return;
+  if(region !== 'ID'){ fetchNagerHolidays(year); return; }
+  if(_idHolState === '') fetchIDHolidays(year);
+  else if(_idHolState === 'done' && !((_holidays.ID || {})[year])) fetchNagerHolidays(year);
+  else if(_idHolState === 'fail') fetchNagerHolidays(year);
+}
+function holidaysRefresh(){
+  var region = holidayRegion();
+  if(_holidays[region]) delete _holidays[region];
+  if(region === 'ID') _idHolState = '';
+  ss(K.holidayCache, JSON.stringify(_holidays));
+  var now = wallNow();
+  ensureHolidays(now.year);
+  holidaysChanged();
+}
+
+/* ══════════════════════════════════════════
    CALENDAR  (month grid, today highlighted)
 ══════════════════════════════════════════ */
 var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -3136,7 +4668,9 @@ function renderCalendar(){
     out += '<span class="cal-day other">' + (daysPrev - i + 1) + '</span>';
   }
   for(var d = 1; d <= daysInMonth; d++){
-    out += '<span class="cal-day' + (d === today ? ' today' : '') + '">' + d + '</span>';
+    var hol = holidaysOn() ? holidayFor(y, m, d) : null;
+    out += '<span class="cal-day' + (d === today ? ' today' : '') + (hol ? ' hol' : '') +
+           (hol ? '" title="' + holEsc(hol.local || hol.name) : '') + '">' + d + '</span>';
   }
   var cells = firstDow + daysInMonth;
   var nextDay = 1;
@@ -3148,6 +4682,24 @@ function renderCalendar(){
   grid.innerHTML = out;
   setText($('cal-month'), MONTH_NAMES[m]);
   setText($('cal-year'), String(y));
+  var hb = $('cal-hol');
+  if(hb){
+    var hlist = holidaysInMonth(y, m), pickH = null;
+    for(var hi = 0; hi < hlist.length; hi++){
+      if(hlist[hi].d >= today){ pickH = hlist[hi]; break; }
+    }
+    if(pickH){
+      hb.innerHTML = '<span class="cal-hol-star">\u2726</span><span class="cal-hol-txt">' +
+        pickH.d + ' ' + MONTH_NAMES[m].slice(0, 3) + ' \u00b7 ' + holEsc(pickH.name) + '</span>';
+      hb.title = pickH.name;
+      hb.hidden = false;
+    } else {
+      hb.innerHTML = '';
+      hb.title = '';
+      hb.hidden = true;
+    }
+  }
+  if(holidaysOn()) ensureHolidays(y);
 }
 
 function scheduleCalendar(){
@@ -3192,7 +4744,7 @@ function prayerClock(hhmm){
   var m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || ''));
   if(!m) return '—';
   var h = parseInt(m[1], 10), mm = m[2];
-  if((gs(K.hourFmt) || '12') === '12'){
+  if((gs(K.hourFmt) || '24') === '12'){
     var ap = h < 12 ? 'AM' : 'PM';
     return pad2n(h % 12 || 12) + ':' + mm + ' ' + ap;
   }
@@ -3736,6 +5288,7 @@ function openPanel(){
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
       overlay.classList.add('open','open-anim');
+      scheduleLens();
     });
   });
 }
@@ -3748,6 +5301,7 @@ function closePanel(){
   var hud = $('peek-hud');
   if(hud) hud.classList.remove('on');
   overlay.classList.remove('open-anim');
+  scheduleLens();
   if(_closeTimer) clearTimeout(_closeTimer);
   _closeTimer = setTimeout(function(){
     overlay.classList.remove('open');
@@ -4314,7 +5868,7 @@ function loadUI(){
   /* clock */
   buildClockStyleGrid(gs(K.clockStyle) || 'default');
   var ih = $('ihour'), isec = $('isecs'), idf = $('idatefmt');
-  if(ih) ih.value = gs(K.hourFmt) || '12';
+  if(ih) ih.value = gs(K.hourFmt) || '24';
   if(isec) isec.value = gs(K.showSecs) || '0';
   if(idf) idf.value = gs(K.dateFmt) || 'long';
   var ics = $('iclocktime'), icsv = $('iclocktime-v');
@@ -4359,6 +5913,11 @@ function loadUI(){
   var bv = $('iglassblur-v'), av = $('iglassalpha-v');
   if(bs){ bs.value = blur;  if(bv) bv.textContent = blur + 'px'; }
   if(as){ as.value = alpha; if(av) av.textContent = alpha + '%'; }
+
+  var lc = $('lens-custom');
+  if(lc) lc.checked = lensCustom();
+  syncLensSliders();
+  updateLensUI(false);
   markMatchingGlassPreset();
 
   buildAnimGrid();
@@ -4379,6 +5938,14 @@ function loadUI(){
   setChecked('w-weather',   gs(K.showWeather)   !== '0');
   setChecked('w-quote',     gs(K.showQuote)     !== '0');
   setChecked('w-status',    gs(K.showStatus)    !== '0');
+  setChecked('w-stocks',    gs(K.showStocks)    === '1');
+  setChecked('w-holidays',  gs(K.showHolidays)  === '1');
+  var hc = $('iholidaycountry');
+  if(hc) hc.value = (gs(K.holidayCountry) || '').toUpperCase();
+  var sl = $('istockslist');
+  var sev = $('istocksevery');
+  if(sev) sev.value = String(stocksEveryMin());
+  syncStocksUI();
   setChecked('p-pause',     gs(K.pauseHidden)   !== '0');
   applyWallModeUI();
 
@@ -4487,6 +6054,68 @@ function toggleCustomQuote(val){
   if(w) w.style.display = (val === 'custom' ? '' : 'none');
 }
 
+/* ── animated show/hide for a settings section ──
+   Mirrors the UI Animation style: the section enters and leaves with the same
+   keyframes the panes use (via the .lx-show/.lx-hide classes built in
+   applyAnimStyle). Falls back to an instant toggle for "None", reduced motion,
+   or the first paint (animate === false). */
+function uiReveal(el, show, animate){
+  if(!el) return;
+  if(!el._lxBound){
+    el._lxBound = true;
+    el.addEventListener('animationend', function(ev){
+      if(ev.target !== el) return;
+      if(el.classList.contains('lx-hide')){
+        el.style.display = 'none';
+        el.classList.remove('lx-hide');
+      }
+    });
+  }
+  var reduce = false;
+  try{
+    reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }catch(e){}
+  var styleId = gs(K.animStyle) || 'spring';
+  if(animate === false || reduce || styleId === 'none'){
+    el.classList.remove('lx-show','lx-hide');
+    el.style.display = show ? '' : 'none';
+    return;
+  }
+  if(show){
+    if(el.style.display !== 'none' && !el.classList.contains('lx-hide')) return;
+    el.style.display = '';
+    el.classList.remove('lx-hide','lx-show');
+    void el.offsetWidth;
+    el.classList.add('lx-show');
+  } else {
+    if(el.style.display === 'none' && !el.classList.contains('lx-show')) return;
+    el.classList.remove('lx-show','lx-hide');
+    void el.offsetWidth;
+    el.classList.add('lx-hide');
+  }
+}
+
+/* show/sync the liquid-lens controls: the whole block only for Liquid Glass,
+   the sliders only when "Custom lens" is on */
+function updateLensUI(animate){
+  var liquid = glassStyle() === 'liquid';
+  uiReveal($('lens-block'), liquid, animate);
+  uiReveal($('lens-tuning'), liquid && lensCustom(), animate);
+}
+function syncLensSliders(){
+  var lp = $('ilenspeak'), le = $('ilensedge'), lsp = $('ilensspread'), lz = $('ilenszoom');
+  var lpv = $('ilenspeak-v'), lev = $('ilensedge-v'), lspv = $('ilensspread-v'), lzv = $('ilenszoom-v');
+  var pv = Math.round(lensPeak() * 100);
+  var ev = Math.round(lensEdgePx());
+  var sv = Math.round(lensSpread() * 100);
+  var zv = Math.round(lensZoom() * 100);
+  if(lp){ lp.value = pv; if(lpv) lpv.textContent = pv + '%'; }
+  if(le){ le.value = ev; if(lev) lev.textContent = lensEdgeLabel(ev); }
+  if(lsp){ lsp.value = sv; if(lspv) lspv.textContent = sv + '%'; }
+  if(lz){ lz.value = zv; if(lzv) lzv.textContent = zv + '%'; }
+  syncAllRangeFills();
+}
+
 /* ══════════════════════════════════════════
    BACKUP
 ══════════════════════════════════════════ */
@@ -4555,6 +6184,7 @@ applyCalSize();
 applyVideoView();
 applyGradient();
 applyMotion();
+applyWaveView();
 renderGreeting();
 updateTabName();
 detectBrowserDefault();
@@ -4566,6 +6196,7 @@ initStatus();
 renderCalendar();
 scheduleCalendar();
 initPrayer();
+initStocks();
 
 /* one-time: the quote card used to be saved with a fixed height, which left
    gaps or clipped text as quotes rotated. Switch it back to auto height. */
@@ -4590,6 +6221,20 @@ initPrayer();
   });
   if(changed) ss(K.sizes, JSON.stringify(sz));
   ss('nt_auto_sizes_v1','1');
+})();
+
+/* one-time: the weather and markets cards used to measure their base from a
+   transient "Updating..." placeholder, which shrank the card and collapsed the
+   markets grid once the data landed. Give them the stable base once so existing
+   profiles stop looking broken. */
+(function(){
+  if(gs('nt_datafix_v1') === '1') return;
+  var sz = parseJSON(gs(K.sizes),{}) || {};
+  ['weather','stocks'].forEach(function(id){
+    sz[id] = { w:FIXED_BASE[id].w, auto:1 };
+  });
+  ss(K.sizes, JSON.stringify(sz));
+  ss('nt_datafix_v1','1');
 })();
 
 measureBases();
@@ -4625,9 +6270,11 @@ scheduleClock();
 
 if(isShown('weather')) loadWeather(false);
 if(isShown('quote'))   loadQuote(false);
+if(isShown('stocks'))  loadStocks(false);
 applyQuoteStyle();
 startQuoteTimer();
 startWeatherTimer();
+startStocksTimer();
 
 /* Window resize: re-derive widget widths first (a saved size is clamped to
    the viewport, so shrinking used to leave the smaller inline width behind
@@ -4858,6 +6505,7 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     if(!b) return;
     ss(K.glassStyle, b.getAttribute('data-glass') === 'liquid' ? 'liquid' : 'classic');
     applyGlassSettings();
+    updateLensUI(true);
   });
   var gts = $('glass-tint-seg');
   if(gts) gts.addEventListener('click', function(e){
@@ -4885,6 +6533,88 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
   };
   wirePeek(bs, function(){ return 'Glass blur ' + bs.value + 'px'; });
   wirePeek(as, function(){ return 'Glass opacity ' + as.value + '%'; });
+
+  /* ── liquid lens tuning ── */
+  var lp = $('ilenspeak'), le = $('ilensedge'), lsp = $('ilensspread'), lz = $('ilenszoom');
+  var lpv = $('ilenspeak-v'), lev = $('ilensedge-v'), lspv = $('ilensspread-v'), lzv = $('ilenszoom-v');
+  function lensTuningChanged(){
+    /* live: rebuild on every frame at a small map size, then one crisp pass
+       once the drag settles (scheduleLensLive does both) */
+    if(glassStyle() === 'liquid' && lensSupported()) scheduleLensLive();
+  }
+  if(lp) lp.oninput = function(){
+    if(lpv) lpv.textContent = lp.value + '%';
+    ss(K.lensPeak, lp.value);
+    lensTuningChanged();
+    markPreset('');
+    peekUpdate('Lens strength ' + lp.value + '%');
+  };
+  if(le) le.oninput = function(){
+    if(lev) lev.textContent = lensEdgeLabel(le.value);
+    ss(K.lensEdge, le.value);
+    lensTuningChanged();
+    markPreset('');
+    peekUpdate('Lens edge ' + lensEdgeLabel(le.value));
+  };
+  if(lsp) lsp.oninput = function(){
+    if(lspv) lspv.textContent = lsp.value + '%';
+    ss(K.lensSpread, lsp.value);
+    lensTuningChanged();
+    markPreset('');
+    peekUpdate('Lens spread ' + lsp.value + '%');
+  };
+  if(lz) lz.oninput = function(){
+    if(lzv) lzv.textContent = lz.value + '%';
+    ss(K.lensZoom, lz.value);
+    lensTuningChanged();
+    markPreset('');
+    peekUpdate('Lens zoom ' + lz.value + '%');
+  };
+  /* releasing a slider (or any committed change) skips the wait and finishes
+     at full resolution right away */
+  function lensSettled(){
+    dropLensCache();
+    if(glassStyle() === 'liquid' && lensSupported()) scheduleLensFull();
+  }
+  if(lp)  lp.onchange  = lensSettled;
+  if(le)  le.onchange  = lensSettled;
+  if(lsp) lsp.onchange = lensSettled;
+  if(lz)  lz.onchange  = lensSettled;
+  wirePeek(lp,  function(){ return 'Lens strength ' + lp.value + '%'; });
+  wirePeek(le,  function(){ return 'Lens edge ' + lensEdgeLabel(le.value); });
+  wirePeek(lsp, function(){ return 'Lens spread ' + lsp.value + '%'; });
+  wirePeek(lz,  function(){ return 'Lens zoom ' + lz.value + '%'; });
+  /* back to the fresh-install preset without touching the Custom toggle */
+  var lreset = $('lens-reset');
+  if(lreset) lreset.onclick = function(){
+    ss(K.lensPeak,   String(Math.round(LENS_DEF_PEAK * 100)));
+    ss(K.lensEdge,   String(LENS_DEF_EDGE));
+    ss(K.lensSpread, String(Math.round(LENS_DEF_SPREAD * 100)));
+    ss(K.lensZoom,   String(Math.round(LENS_DEF_ZOOM * 100)));
+    syncLensSliders();
+    dropLensCache();
+    if(glassStyle() === 'liquid' && lensSupported()) scheduleLensFull();
+    markPreset('');
+    peekUpdate('Lens reset');
+  };
+
+  var lc = $('lens-custom');
+  if(lc) lc.onchange = function(){
+    ss(K.lensCustom, lc.checked ? '1' : '0');
+    if(lc.checked){
+      /* seed the sliders at the recommended lens the first time Custom is on */
+      if(gs(K.lensPeak)   == null) ss(K.lensPeak,   String(Math.round(LENS_DEF_PEAK * 100)));
+      if(gs(K.lensEdge)   == null) ss(K.lensEdge,   String(LENS_DEF_EDGE));
+      if(gs(K.lensSpread) == null) ss(K.lensSpread, String(Math.round(LENS_DEF_SPREAD * 100)));
+      if(gs(K.lensZoom)   == null) ss(K.lensZoom,   String(Math.round(LENS_DEF_ZOOM * 100)));
+      syncLensSliders();
+    }
+    dropLensCache();
+    if(glassStyle() === 'liquid' && lensSupported()) scheduleLensFull();
+    markPreset('');
+    updateLensUI(true);
+    peekUpdate(lc.checked ? 'Custom lens on' : 'Recommended lens');
+  };
 
   var row = $('preset-row');
   if(row){
@@ -5006,6 +6736,7 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
       el.style.width = '';
       el.style.height = '';
       el.style.removeProperty('--ws');
+      el.style.removeProperty('--wbw');
       if(id === 'searchbar'){
         var w = el.querySelector('.search-wrap');
         if(w){ w.style.width = ''; w.style.height = ''; }
@@ -5149,6 +6880,7 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     if(vxv) vxv.textContent = '0';
     if(vyv) vyv.textContent = '0';
     applyVideoView();
+    syncAllRangeFills();
     flash(brv,'Reset');
   };
 })();
@@ -5218,6 +6950,76 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     startQuoteTimer();
   });
   showToggle('w-status',K.showStatus,function(on){ if(!on) closeStatus(false); });
+  showToggle('w-stocks',K.showStocks,function(on){
+    if(on) loadStocks(true);
+    startStocksTimer();
+  });
+  showToggle('w-holidays',K.showHolidays,function(on){
+    if(on){ ensureHolidays(wallNow().year); }
+    renderCalendar();
+    if(_openWin === 'calendar-modal') renderCalWin(false);
+  });
+
+  var skRefresh = $('stocks-refresh');
+  if(skRefresh) skRefresh.onclick = function(){
+    /* drop focus so :focus-within can't keep the button on screen after the
+       window closes */
+    try{ skRefresh.blur(); }catch(e){}
+    loadStocks(true);
+  };
+
+  var stocksInput = $('istockslist');
+  if(stocksInput){
+    var commitStocks = function(){
+      var parts = stocksInput.value.split(',');
+      var out = [];
+      parts.forEach(function(p){
+        p = p.trim().toUpperCase();
+        if(p && validStockSymbol(p) && out.indexOf(p) < 0) out.push(p);
+      });
+      out = out.slice(0, 8);
+      if(!out.length) out = stocksDefaults().slice();
+      ss(stocksListKey(), JSON.stringify(out));
+      ss(K.stocksCache, '');
+      stocksInput.value = out.join(', ');
+      loadStocks(true);
+      startStocksTimer();
+      syncStocksUI();
+    };
+    stocksInput.onchange = commitStocks;
+    stocksInput.onblur = commitStocks;
+  }
+  var stocksMarketSeg = $('istocksmarket');
+  if(stocksMarketSeg){
+    stocksMarketSeg.addEventListener('click', function(e){
+      var b = e.target.closest('.seg-btn');
+      if(!b) return;
+      setStocksMarket(b.getAttribute('data-market'));
+    });
+  }
+  var stocksEvery = $('istocksevery');
+  if(stocksEvery){
+    var commitStockEvery = function(){
+      var m = parseInt(stocksEvery.value, 10);
+      if(!(m > 0)) m = 5;
+      m = Math.max(1, Math.min(60, m));
+      stocksEvery.value = m;
+      ss(K.stocksEvery, String(m));
+      startStocksTimer();
+    };
+    stocksEvery.onchange = commitStockEvery;
+    stocksEvery.onblur = commitStockEvery;
+  }
+  populateCurrencySelects();
+  var settingsCurrency = $('istockscurrency');
+  if(settingsCurrency) settingsCurrency.onchange = function(){ setStocksCurrency(settingsCurrency.value); };
+  var holCountry = $('iholidaycountry');
+  if(holCountry){
+    holCountry.onchange = function(){
+      ss(K.holidayCountry, (holCountry.value || '').toUpperCase());
+      holidaysRefresh();
+    };
+  }
 
   var wall = $('wall-grid');
   if(wall){
@@ -5239,7 +7041,7 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     mseg.addEventListener('click', function(e){
       var b = e.target.closest('.seg-btn');
       if(!b) return;
-      ss(K.motion, b.getAttribute('data-motion') || 'slow');
+      ss(K.motion, b.getAttribute('data-motion') || 'flow');
       applyMotion();
     });
   }
@@ -5248,15 +7050,88 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     applyMotion();
     peekUpdate('Flow ' + (FLOW_TITLES[f] || f));
   });
-  var mspd = $('imotionspeed'), mspdv = $('imotionspeed-v');
-  if(mspd){
-    mspd.oninput = function(){
-      if(mspdv) mspdv.textContent = mspd.value + '%';
-      ss(K.motionSpeed, mspd.value);
-      applyMotion();
-      peekUpdate('Drift speed ' + mspd.value + '%');
+  var wdir = $('iwavedir');
+  if(wdir){
+    var waveBegin = function(){
+      waveLowDetail = true;
+      document.body.classList.add('wave-adjusting');
     };
-    wirePeek(mspd, function(){ return 'Drift speed ' + mspd.value + '%'; });
+    var waveEnd = function(){
+      if(!waveLowDetail) return;
+      waveLowDetail = false;
+      document.body.classList.remove('wave-adjusting');
+      waveScheduleRebuild();
+    };
+    wdir.oninput = function(){
+      waveBegin();
+      var d = waveSetDir(wdir.value);
+      showPeek('Wave direction ' + d + '\u00b0', wdir);
+    };
+    wdir.addEventListener('pointerdown', function(){ waveBegin(); startPeek(wdir); });
+    wdir.addEventListener('pointerup', waveEnd);
+    wdir.addEventListener('pointercancel', waveEnd);
+    wdir.addEventListener('change', waveEnd);
+    wdir.addEventListener('blur', waveEnd);
+  }
+  var wzoom = $('iwavezoom'), wzoomv = $('iwavezoom-v');
+  var wpanx = $('iwavex'), wpanxv = $('iwavex-v');
+  var wpany = $('iwavey'), wpanyv = $('iwavey-v');
+  if(wzoom) wzoom.oninput = function(){
+    ss(K.waveZoom, wzoom.value);
+    if(wzoomv) wzoomv.textContent = wzoom.value + '%';
+    applyWaveView();
+    showPeek('Wave zoom ' + wzoom.value + '%', wzoom);
+  };
+  if(wpanx) wpanx.oninput = function(){
+    ss(K.waveX, wpanx.value);
+    if(wpanxv) wpanxv.textContent = wpanx.value;
+    applyWaveView();
+    showPeek('Flow left / right ' + wpanx.value, wpanx);
+  };
+  if(wpany) wpany.oninput = function(){
+    ss(K.waveY, wpany.value);
+    if(wpanyv) wpanyv.textContent = wpany.value;
+    applyWaveView();
+    showPeek('Flow up / down ' + wpany.value, wpany);
+  };
+  [wzoom,wpanx,wpany].forEach(function(inp){
+    if(!inp) return;
+    inp.addEventListener('pointerdown', function(){
+      document.body.classList.add('wave-adjusting');
+      startPeek(inp);
+    });
+    inp.addEventListener('pointerup', function(){ document.body.classList.remove('wave-adjusting'); endPeek(); });
+    inp.addEventListener('pointercancel', function(){ document.body.classList.remove('wave-adjusting'); endPeek(); });
+    inp.addEventListener('blur', function(){ document.body.classList.remove('wave-adjusting'); endPeek(); });
+  });
+  var brst = $('bresetflow');
+  if(brst) brst.onclick = function(){
+    ss(K.gradient, '0');
+    ss(K.motion, 'flow');
+    ss(K.motionSpeed, '50');
+    ss(K.flow, 'rtl');
+    ss(K.waveDir, '40');
+    ss(K.waveZoom, '100');
+    ss(K.waveX, '0');
+    ss(K.waveY, '0');
+    var g = $('grad-grid');
+    if(g) selectIn(g,'.grad-card','data-grad','0');
+    applyGradient(0);
+    applyMotion();
+    applyWaveView();
+    syncAllRangeFills();
+    flash(brst,'Reset');
+  };
+  var speedSeg = $('motion-speed-seg');
+  if(speedSeg){
+    speedSeg.addEventListener('click', function(e){
+      var b = e.target.closest('.seg-btn');
+      if(!b) return;
+      var v = b.getAttribute('data-speed');
+      ss(K.motionSpeed, v);
+      applyMotion();
+      showPeek('Wave speed ' + v + '%', b);
+    });
   }
 
   var pause = $('p-pause');
@@ -5317,6 +7192,7 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
   if(wr) wr.onclick = function(e){
     e.preventDefault();
     e.stopPropagation();
+    try{ wr.blur(); }catch(err){}
     if(wr.classList.contains('spinning')) return;   /* one tap, one request */
     wr.classList.add('spinning');
     var p = loadWeather(true);
@@ -5340,6 +7216,7 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
   if(qr) qr.onclick = function(e){
     e.preventDefault();
     e.stopPropagation();
+    try{ qr.blur(); }catch(err){}
     loadQuote(true);
     startQuoteTimer();
   };
@@ -5460,6 +7337,7 @@ function noteToast(msg, plain, center){
     ss(K.glassStyle, 'classic');
     if(_perfPromptTimer){ clearTimeout(_perfPromptTimer); _perfPromptTimer = null; }
     applyGlassSettings();
+    updateLensUI(true);
     hideGlassPerfPrompt();
     noteToast('Original blur is on \u2014 switch back anytime in Display.', true, true);
   };
@@ -5494,13 +7372,15 @@ function openWin(id){
   if(!m) return;
   if(_openWin && _openWin !== id) closeWin(_openWin, true);
   _openWin = id;
+  document.body.classList.add('win-open');
+  document.body.classList.remove('hover-stale');
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   refreshRichLabels();
   syncAllRangeFills();
   refreshClockLivePreviews();
   requestAnimationFrame(function(){
-    requestAnimationFrame(function(){ m.classList.add('in'); });
+    requestAnimationFrame(function(){ m.classList.add('in'); scheduleLens(); });
   });
 }
 function closeWin(id, instant){
@@ -5508,6 +7388,10 @@ function closeWin(id, instant){
   if(!m) return;
   if(_richOpen) closeRich(_richOpen);
   if(_openWin === id) _openWin = null;
+  document.body.classList.remove('win-open');
+  /* the pointer may still be over a card the overlay had covered: hold the
+     card controls off until the next real pointer move */
+  document.body.classList.add('hover-stale');
   m.classList.remove('in');
   m.setAttribute('aria-hidden','true');
   if(instant){ m.classList.remove('open'); return; }
@@ -5515,6 +7399,12 @@ function closeWin(id, instant){
     if(!m.classList.contains('in')) m.classList.remove('open');
   }, 360);
 }
+/* the first real pointer move after a window closes settles :hover again */
+document.addEventListener('pointermove', function(){
+  if(document.body.classList.contains('hover-stale')){
+    document.body.classList.remove('hover-stale');
+  }
+}, {passive:true});
 
 /* ── first-run welcome ──
    A short, calm first run: say hello, take a name and a city, then set the
@@ -5539,11 +7429,11 @@ function openWelcome(){
   var step = 1;
   var TITLES = ['Welcome to Newly','A name, if you like','One city, for the weather',
                 'How time should feel','Where should search go','A thought for the moment',
-                'How the glass feels','A wallpaper to start with'];
+                'How the glass feels','A wallpaper to start with','A couple of calm extras'];
 
   /* choices are held in memory until Finish, so Back never loses them */
   var choice = {
-    hour: gs(K.hourFmt) || '12',
+    hour: gs(K.hourFmt) || '24',
     timeSrc: gs(K.timeSource) || 'device',
     engine: gs(K.searchEngine) || 'google',
     cat: gs(K.quoteCat) || 'general',
@@ -5551,6 +7441,7 @@ function openWelcome(){
     grad: gradientIndex(),
     motion: motionMode(),
     flow: flowDir(),
+    waveDir: waveDir(),
     glass: glassStyle(),
     tintMode: glassTintMode()
   };
@@ -5614,7 +7505,7 @@ function openWelcome(){
       c.setAttribute('role','button');
       c.setAttribute('tabindex','0');
       c.title = item.name;
-      c.style.background = item.css;
+      c.style.background = bandCss(item);
       c.onclick = function(){
         choice.grad = i;
         paintSwatches();
@@ -5636,7 +7527,7 @@ function openWelcome(){
     if(vw) vw.style.display = grad ? 'none' : '';
     var hint = $('ob-wall-hint');
     if(hint) hint.textContent = grad
-      ? 'Calm Gradient is soft and light on the battery.'
+      ? 'Calm Wave is a soft, flowy wave \u2014 easy on the battery.'
       : 'Video Wallpaper plays your own clip behind the glass. Pick one here, or add it later in Settings.';
   }
   /* the wallpaper choice takes hold at once, so a video imported while the
@@ -5751,6 +7642,11 @@ function openWelcome(){
       paintSeg('ob-motion','data-motion', choice.motion);
       buildFlowPad('ob-flow-seg', function(f){ choice.flow = f; ss(K.flow, f); applyMotion(); });
       paintFlowPad('ob-flow-seg');
+      syncWaveDirUI();
+      var owd = $('ob-wavedir');
+      if(owd){
+        owd.oninput = function(){ choice.waveDir = waveSetDir(owd.value); };
+      }
       syncObWall();
     }
   }
@@ -5771,7 +7667,7 @@ function openWelcome(){
     setWeatherCity(v, null);
   }
   function rememberClock(){
-    if(choice.hour !== (gs(K.hourFmt) || '12')){
+    if(choice.hour !== (gs(K.hourFmt) || '24')){
       ss(K.hourFmt, choice.hour);
       var ih = $('ihour');
       if(ih) ih.value = choice.hour;
@@ -5803,6 +7699,7 @@ function openWelcome(){
     ss(K.gradient, String(choice.grad));
     ss(K.motion, choice.motion);
     ss(K.flow, choice.flow);
+    ss(K.waveDir, String(choice.waveDir));
     applyGradient(choice.grad);
     applyMotion();
     applyWallModeUI();
@@ -5814,6 +7711,8 @@ function openWelcome(){
     m.classList.remove('in');
     m.setAttribute('aria-hidden','true');
     if(_openWin === 'welcome-modal') _openWin = null;
+    document.body.classList.remove('win-open');
+    document.body.classList.add('hover-stale');
     setTimeout(function(){ m.classList.remove('open'); }, 360);
   }
   function finish(skipped){
@@ -5862,6 +7761,27 @@ function openWelcome(){
     syncObWall();
   });
 
+  /* extras step — written the moment they are toggled */
+  var obStocks = $('ob-stocks'), obHols = $('ob-holidays');
+  if(obStocks){
+    obStocks.checked = gs(K.showStocks) === '1';
+    obStocks.onchange = function(){
+      ss(K.showStocks, obStocks.checked ? '1' : '0');
+      applyWidgetVisibility(true);
+      if(obStocks.checked) loadStocks(true);
+      startStocksTimer();
+    };
+  }
+  if(obHols){
+    obHols.checked = gs(K.showHolidays) === '1';
+    obHols.onchange = function(){
+      ss(K.showHolidays, obHols.checked ? '1' : '0');
+      applyWidgetVisibility(true);
+      if(obHols.checked) ensureHolidays(wallNow().year);
+      renderCalendar();
+    };
+  }
+
   /* glass sliders and presets — every touch is felt at once */
   var gBlur = $('ob-glass-blur'), gAlpha = $('ob-glass-alpha');
   var gBlurV = $('ob-glass-blur-v'), gAlphaV = $('ob-glass-alpha-v');
@@ -5881,16 +7801,16 @@ function openWelcome(){
   wireWinPeek(gBlur, 'welcome-modal', function(){ return 'Glass blur ' + gBlur.value + 'px'; });
   wireWinPeek(gAlpha, 'welcome-modal', function(){ return 'Glass opacity ' + gAlpha.value + '%'; });
 
-  /* drift speed — same live feel, same peek */
-  var mSpeed = $('ob-motion-speed'), mSpeedV = $('ob-motion-speed-v');
-  if(mSpeed){
-    mSpeed.oninput = function(){
-      if(mSpeedV) mSpeedV.textContent = mSpeed.value + '%';
-      ss(K.motionSpeed, mSpeed.value);
+  /* flow speed — ten-step segmented control, same as Settings */
+  var obSpeedSeg = $('ob-motion-speed-seg');
+  if(obSpeedSeg){
+    obSpeedSeg.addEventListener('click', function(e){
+      var b = e.target.closest('.seg-btn');
+      if(!b) return;
+      ss(K.motionSpeed, b.getAttribute('data-speed'));
       applyMotion();
-      peekUpdate('Drift speed ' + mSpeed.value + '%');
-    };
-    wireWinPeek(mSpeed, 'welcome-modal', function(){ return 'Drift speed ' + mSpeed.value + '%'; });
+      peekUpdate('Wave speed ' + b.getAttribute('data-speed') + '%');
+    });
   }
 
   /* search engine — the same list and the same rich dropdown as Settings */
@@ -6102,7 +8022,9 @@ function renderCalWin(anim){
   }
   for(var d = 1; d <= daysInMonth; d++){
     var today = (y === now.year && m === now.mon && d === now.date);
-    out += '<span class="cal-day' + (today ? ' today' : '') + '">' + d + '</span>';
+    var hol = holidaysOn() ? holidayFor(y, m, d) : null;
+    out += '<span class="cal-day' + (today ? ' today' : '') + (hol ? ' hol' : '') +
+           (hol ? '" title="' + holEsc(hol.local || hol.name) : '') + '">' + d + '</span>';
   }
   var cells = firstDow + daysInMonth, nextDay = 1;
   while(cells % 7 !== 0 || cells < 35){
@@ -6112,6 +8034,23 @@ function renderCalWin(anim){
   grid.innerHTML = out;
   setText($('calwin-month'), MONTH_NAMES[m]);
   setText($('calwin-sub'), String(y));
+  var hw = $('calwin-hols');
+  if(hw){
+    var hlist = holidaysInMonth(y, m);
+    if(hlist.length){
+      var hh = '';
+      hlist.forEach(function(h){
+        hh += '<div class="calwin-hol"><span class="calwin-hol-d">' + h.d + '</span>' +
+              '<span class="calwin-hol-n" title="' + holEsc(h.name) + '">' + holEsc(h.name) + '</span></div>';
+      });
+      hw.innerHTML = hh;
+    } else if(holidaysOn()){
+      hw.innerHTML = '<div class="calwin-hol empty">No public holidays this month.</div>';
+    } else {
+      hw.innerHTML = '';
+    }
+  }
+  if(holidaysOn()) ensureHolidays(y);
   if(anim){
     var style = gs(K.animStyle) || 'spring';
     ['cal-anim','cal-spring','cal-fade','cal-slide','cal-zoom','cal-blur','cal-drift','cal-glide','cal-unfold','cal-none'].forEach(function(c){
@@ -6179,7 +8118,7 @@ function buildClockWinGrid(){
 }
 function extSyncClockWin(){
   buildClockWinGrid();
-  var h = $('clockwin-hour');    if(h) h.value = gs(K.hourFmt) || '12';
+  var h = $('clockwin-hour');    if(h) h.value = gs(K.hourFmt) || '24';
   var s = $('clockwin-secs');    if(s) s.value = gs(K.showSecs) || '0';
   var d = $('clockwin-datefmt'); if(d) d.value = gs(K.dateFmt) || 'long';
   var z = $('clockwin-size'), zv = $('clockwin-size-v');
@@ -6806,7 +8745,8 @@ function openRich(sel){
   updateRich(sel);
   var r = trig.getBoundingClientRect();
   menu.style.minWidth = Math.max(180, Math.round(r.width)) + 'px';
-  var est = Math.min(240, sel.options.length * 34 + 22);
+  var visible = sel.__menuRows ? Math.min(sel.__menuRows, sel.options.length) : sel.options.length;
+  var est = Math.min(240, visible * 34 + 22);
   var spaceBelow = window.innerHeight - r.bottom - 10;
   var up = spaceBelow < est && r.top > 240;
   menu.setAttribute('data-up', up ? '1':'0');
@@ -6892,8 +8832,27 @@ function makeRich(sel){
   document.body.appendChild(menu);
   sel.__wrap = wrap; sel.__trig = trig; sel.__rv = rv; sel.__menu = menu;
 
+  /* a long list can cap its visible rows and scroll instead (currency, etc.) */
+  var rows = parseInt(sel.getAttribute('data-rows'), 10);
+  if(rows > 0){
+    sel.__menuRows = rows;
+    menu.style.overflowY = 'auto';
+    menu.style.maxHeight = (rows * 32 + 12) + 'px';   /* fallback before measuring */
+  }
+
   syncRichItems(sel);
   updateRich(sel);
+  /* measure one row and cap at exactly that many rows, so the list never ends
+     on a half-visible option */
+  if(sel.__menuRows){
+    menu.style.visibility = 'hidden';
+    menu.style.display = 'flex';
+    var probe = menu.querySelector('.rich-item');
+    var ih = probe ? probe.offsetHeight : 30;
+    menu.style.maxHeight = (sel.__menuRows * (ih + 2) + 10) + 'px';
+    menu.style.display = '';
+    menu.style.visibility = '';
+  }
 }
 
 /* one popover at a time: a click that lands outside the open list folds it */
@@ -6930,6 +8889,9 @@ document.addEventListener('keydown', function(e){
 
 /* build a rich list for every native select that uses the field look */
 function initRichSelects(){
+  /* the currency lists are filled at runtime — build their options before the
+     rich menus snapshot them */
+  populateCurrencySelects();
   document.querySelectorAll('select.fi').forEach(makeRich);
 }
 function refreshRichLabels(){

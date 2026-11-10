@@ -63,6 +63,10 @@ body{
 #wave-bg{
   position:absolute;inset:0;z-index:0;pointer-events:none;
   width:100%;height:100%;
+  transform:translate3d(var(--wave-pan-x,0px),var(--wave-pan-y,0px),0) scale(var(--wave-zoom,1));
+  transform-origin:center center;
+  will-change:transform;
+  backface-visibility:hidden;
 }
 #wave-bg svg{display:block;width:100%;height:100%;}
 
@@ -74,6 +78,9 @@ body{
   --wave-ty:var(--wave-dy);
   --wave-dir:normal;
   --wave-ease:linear;
+  --wave-zoom:1;
+  --wave-pan-x:0px;
+  --wave-pan-y:0px;
 }
 .wave-flow{
   transform:translate3d(0,0,0);
@@ -108,12 +115,13 @@ body{
 :root[data-flow="bl"] {--wave-tx:calc(var(--wave-dx) * -0.18);--wave-ty:calc(var(--wave-dy) * 0.18);
   --wave-dir:alternate;--wave-ease:ease-in-out;}
 body[data-motion="still"] .wave-flow{animation:none;}
-body[data-motion="slow"] .wave-flow{
-  animation:wave-slide var(--grad-dur,40s) var(--wave-ease,linear) infinite var(--wave-dir,normal);
-}
 body[data-motion="flow"] .wave-flow{
   animation:wave-slide calc(var(--grad-dur,40s) * 0.45) var(--wave-ease,linear) infinite var(--wave-dir,normal);
 }
+/* while a flow slider is being dragged the field holds still: the compositor
+   is not also running the seamless slide, so the rebuild keeps up. Placed
+   after the motion rules so it wins the shorthand's play-state. */
+body.wave-adjusting .wave-flow{animation-play-state:paused !important;}
 @media (prefers-reduced-motion: reduce){
   .wave-flow,
   body[data-motion] .wave-flow{animation:none !important;}
@@ -176,16 +184,17 @@ body.video-failed #background{display:none;}
 }
 
 /* ── Liquid Glass (opt-in): a lens at the edge, not just a blur ──
-   The first declaration is the graceful fallback: browsers that can't use an
-   SVG filter as a backdrop-filter value (Firefox) keep the plain blur and drop
-   the second pair, so nothing ever loses its glass. */
+   These rules are the frosted material and the fallback. The lens itself is a
+   complete data-URL filter written inline by script.js, one per surface, so
+   the shared displacement map can be sized to that surface's real border box.
+   (Chromium ignores a shared percentage-sized feImage, and it drops fragment
+   references such as url(#lg-f-0); a data URL avoids both.) An engine without
+   filter references in backdrop-filter simply keeps this blur. */
 body.glass-liquid .glass,
 body.glass-liquid #gear-btn,
 body.glass-liquid #layout-btn{
   backdrop-filter:blur(var(--glass-blur)) saturate(160%);
   -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(160%);
-  backdrop-filter:blur(var(--glass-blur)) url(#lg-lens) saturate(170%) brightness(1.05);
-  -webkit-backdrop-filter:blur(var(--glass-blur)) url(#lg-lens) saturate(170%) brightness(1.05);
 }
 body.glass-liquid .glass{
   border-color:rgba(255,255,255,0.30);
@@ -231,25 +240,23 @@ body.glass-liquid .prayer-modal::before,
 body.glass-liquid .changelog-modal::before{
   content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
   background:rgba(0,0,0,0);
-  -webkit-backdrop-filter:blur(0px);
-  backdrop-filter:blur(0px);
-  transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;
+  -webkit-backdrop-filter:blur(var(--glass-scrim-blur,12px));
+  backdrop-filter:blur(var(--glass-scrim-blur,12px));
+  transition:background-color 0.28s ease;
 }
 body.glass-liquid #overlay.open-anim::before,
 body.glass-liquid .win-modal.in::before,
 body.glass-liquid .prayer-modal.in::before,
 body.glass-liquid .changelog-modal.open::before{
   background:rgba(0,0,0,0.18);
-  -webkit-backdrop-filter:blur(var(--glass-scrim-blur,12px));
-  backdrop-filter:blur(var(--glass-scrim-blur,12px));
 }
 /* The sheet itself is a denser material than a card: more blur, same lens. */
 body.glass-liquid #panel,
 body.glass-liquid .win-panel,
 body.glass-liquid .prayer-panel,
 body.glass-liquid .changelog-panel{
-  -webkit-backdrop-filter:blur(var(--glass-sheet-blur,20px)) saturate(165%) url(#lg-lens);
-  backdrop-filter:blur(var(--glass-sheet-blur,20px)) saturate(165%) url(#lg-lens);
+  -webkit-backdrop-filter:blur(var(--glass-sheet-blur,20px)) saturate(165%);
+  backdrop-filter:blur(var(--glass-sheet-blur,20px)) saturate(165%);
 }
 /* Small glassy cards inside a sheet read their parent, not the wallpaper. */
 body.glass-liquid #panel .glass,
@@ -507,7 +514,7 @@ body.layout-editing .draggable.glass{
   display:none;align-items:center;justify-content:center;
   /* the dim and its blur fade through their own properties, never through
      opacity: a group opacity would switch the glass blur off mid-animation */
-  transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;
+  transition:background-color 0.30s ease;
   pointer-events:none;
 }
 #overlay.open{
@@ -521,25 +528,23 @@ body.layout-editing .draggable.glass{
   width:var(--panel-w,540px);max-width:96vw;max-height:92vh;
   border-radius:24px;color:#fff;
   display:flex;flex-direction:column;overflow:hidden;
-  transform:scale(0.94) translateY(12px);
-  transition:transform 0.32s cubic-bezier(0.34,1.30,0.64,1);
-}
-#overlay.open-anim #panel{
-  transform:scale(1) translateY(0);
+  transition:none;
 }
 
 /* peek mode — while a layout slider is being dragged, get the panel and the
    dimmer out of the way so the widget movement is actually visible */
 #overlay.peek,
-body.glass-liquid #overlay.open-anim.peek{background:rgba(0,0,0,0.04);-webkit-backdrop-filter:none;backdrop-filter:none;transition:background 0.12s ease;}
+body.glass-liquid #overlay.open-anim.peek{background:rgba(0,0,0,0.04);-webkit-backdrop-filter:none !important;backdrop-filter:none !important;transition:background 0.12s ease;}
 #overlay.open-anim.peek #panel{
   /* the sheet steps out of the way entirely, but the controls are still there:
-     whichever row you are dragging is kept solid, the rest fades */
+     whichever row you are dragging is kept solid, the rest fades.
+     `!important` is required: the liquid lens writes an inline backdrop-filter
+     on the panel, which would otherwise keep it blurred through the peek. */
   opacity:1;
-  background:transparent;
-  border-color:transparent;
-  -webkit-backdrop-filter:none;backdrop-filter:none;
-  box-shadow:none;
+  background:transparent !important;
+  border-color:transparent !important;
+  -webkit-backdrop-filter:none !important;backdrop-filter:none !important;
+  box-shadow:none !important;
   transition:background 0.12s ease;
 }
 #overlay.open-anim.peek #panel::after{opacity:0;}
@@ -1137,7 +1142,7 @@ input[type=range]::-moz-range-thumb{
 .hidden{display:none!important;}
 /* widgets fade in/out instead of popping off the page */
 .w-hiding{opacity:0!important;filter:blur(3px);pointer-events:none!important;}
-#shortcuts,#datetime,#greeting-wrap,#searchbar,#weather,#quote{
+#shortcuts,#datetime,#greeting-wrap,#searchbar,#weather,#quote,#stocks{
   transition:opacity 0.22s ease,filter 0.22s ease;
 }
 
@@ -1180,6 +1185,54 @@ input[type=range]::-moz-range-thumb{
   color:rgba(255,255,255,0.42);
   margin-top:5px;
 }
+/* BMKG attribution: tiny, calm, only shown while BMKG data is on the card */
+.w-src{
+  display:block;font-size:8.5px;line-height:1.2;letter-spacing:0.05em;
+  color:rgba(255,255,255,0.52);text-decoration:none;margin-top:3px;
+}
+.w-src:hover{color:rgba(255,255,255,0.72);text-decoration:underline;}
+.w-src[hidden]{display:none;}
+
+/* ── stocks widget ── */
+#stocks{
+  top:150px;left:20px;
+  padding:11px 13px 9px;border-radius:18px;
+  color:#fff;min-width:150px;
+}
+.sk-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;padding-right:22px;}
+#stocks:hover .quote-refresh,#stocks:focus-within .quote-refresh{opacity:1;}
+.sk-title{font-size:9px;letter-spacing:0.16em;text-transform:uppercase;opacity:0.62;}
+.sk-note{font-size:8px;letter-spacing:0.05em;opacity:0.4;}
+.sk-list{display:flex;flex-direction:column;gap:4px;}
+.sk-row{display:grid;grid-template-columns:1fr auto 52px auto;align-items:center;gap:6px;}
+.sk-row.stale,.sk-win-row.stale{opacity:0.55;}
+.sk-sym{font-size:10.5px;font-weight:600;letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sk-px{font-size:10.5px;opacity:0.9;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.sk-cur{font-size:7.5px;opacity:0.55;margin-left:3px;letter-spacing:0.03em;vertical-align:0.5px;}
+.sk-chg{font-size:8.5px;text-align:right;font-variant-numeric:tabular-nums;letter-spacing:0.01em;}
+.sk-chg.up{color:#8ff0b8;}
+.sk-chg.down{color:#ffa6af;}
+.sk-chg.flat{opacity:0.4;}
+.sk-spark{opacity:0.85;}
+.sk-spark-slot{width:52px;display:flex;justify-content:center;overflow:hidden;}
+.sk-src{font-size:7.5px;letter-spacing:0.06em;opacity:0.32;margin-top:6px;text-align:right;}
+.sk-empty{font-size:10px;opacity:0.5;padding:4px 0;}
+/* expanded markets window */
+#stocks-modal .win-panel{width:min(420px,94vw);}
+.sk-win-list{display:flex;flex-direction:column;gap:6px;margin-top:12px;max-height:230px;overflow:auto;}
+.sk-win-row{display:grid;grid-template-columns:1.2fr 1fr 52px 26px;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.06);}
+.sk-win-id{display:flex;flex-direction:column;gap:1px;min-width:0;}
+.sk-win-sym{font-size:12px;font-weight:600;color:#fff;letter-spacing:0.02em;}
+.sk-win-name{font-size:9.5px;color:rgba(255,255,255,0.42);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sk-win-num{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-variant-numeric:tabular-nums;}
+.sk-win-px{font-size:12px;color:rgba(255,255,255,0.9);}
+.sk-win-row .sk-chg{font-size:9.5px;}
+.sk-remove{width:24px;height:24px;border-radius:8px;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.55);cursor:pointer;font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background 0.2s ease,color 0.2s ease;}
+.sk-remove:hover{background:rgba(255,120,130,0.28);color:#fff;}
+.sk-win-add{display:flex;gap:8px;margin-top:10px;}
+.sk-win-empty{font-size:11px;opacity:0.5;padding:10px 2px;}
+.sk-win-updated{font-size:11px;color:rgba(255,255,255,0.7);padding:7px 0;}
+.sk-win-src{font-size:9px;letter-spacing:0.06em;opacity:0.4;}
 
 /* ── quote widget ── */
 #quote{
@@ -1232,6 +1285,23 @@ input[type=range]::-moz-range-thumb{
   box-shadow:inset 0 0 0 1px rgba(90,200,250,0.55);
   color:#fff;font-weight:600;
 }
+/* public-holiday dot: present but quiet, and it cannot hide "today" */
+.cal-day.hol{position:relative;}
+.cal-day.hol::after{
+  content:'';position:absolute;left:50%;bottom:1px;
+  width:3px;height:3px;border-radius:50%;
+  background:rgba(255,214,140,0.92);transform:translateX(-50%);
+}
+.cal-day.hol.today::after{background:#fff;}
+/* the nearest holiday, named in one quiet line under the small grid */
+.cal-hol{
+  display:flex;align-items:center;gap:4px;margin-top:6px;
+  font-size:8px;line-height:1.3;letter-spacing:0.02em;
+  color:rgba(255,214,140,0.92);
+}
+.cal-hol[hidden]{display:none;}
+.cal-hol-star{flex-shrink:0;font-size:7.5px;opacity:0.85;}
+.cal-hol-txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* the grid is the content here: let it fill the card and never zoom, so
    shrinking the card closes the gap instead of leaving dead space */
 #calendar .w-body{
@@ -1302,6 +1372,9 @@ body:not(.quran-mode) #prayer-settings{display:none!important;}
 #quote .w-body{
   display:flex;flex-direction:column;justify-content:center;height:100%;
 }
+/* the markets card keeps its base layout width while `zoom` scales it, so the
+   symbol column never collapses when the card grows */
+#stocks .w-body{width:var(--wbw,100%);}
 #searchbar .w-body{height:100%;}
 #shortcuts .w-body{min-height:100%;align-content:center;}
 #q-text{padding-right:22px;}
@@ -1319,6 +1392,15 @@ body:not(.quran-mode) #prayer-settings{display:none!important;}
   transition:opacity 0.2s ease,background 0.2s ease,scale 0.2s ease;
 }
 #quote:hover .quote-refresh,#quote:focus-within .quote-refresh{opacity:1;}
+/* While a window is open (and right after it closes) the card controls must not
+   linger. CSS :hover can stay stuck under a dismissed overlay until the pointer
+   moves again, so these states force them off until a real pointer move. */
+body.win-open .quote-refresh,
+body.win-open .weather-refresh{opacity:0!important;pointer-events:none;}
+@media (hover:hover){
+  body.hover-stale .quote-refresh,
+  body.hover-stale .weather-refresh{opacity:0!important;pointer-events:none;}
+}
 .quote-refresh:hover{background:rgba(255,255,255,0.24);color:#fff;scale:1.06;}
 .quote-refresh:active{scale:0.94;}
 @media (hover:none){.quote-refresh{opacity:0.85;}}
@@ -1449,7 +1531,7 @@ textarea.fi{
   display:none;align-items:center;justify-content:center;
   padding:24px;background:rgba(0,0,0,0);
   -webkit-backdrop-filter:blur(0px);backdrop-filter:blur(0px);
-  transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;pointer-events:none;
+  transition:background-color 0.30s ease;pointer-events:none;
 }
 .prayer-modal.open{display:flex;pointer-events:auto;}
 .prayer-modal.in{background:rgba(0,0,0,0.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
@@ -1457,8 +1539,7 @@ textarea.fi{
   width:min(340px,92vw);max-height:82vh;overflow-y:auto;
   overscroll-behavior:contain;
   padding:18px 18px 16px;border-radius:22px;color:var(--fg);
-  transform:scale(0.94) translateY(12px);
-  transition:transform 0.32s cubic-bezier(0.34,1.30,0.64,1);
+  transition:none;
 }
 .prayer-modal.in .prayer-panel{transform:none;}
 .prayer-city{font-size:10px;letter-spacing:0.10em;text-transform:uppercase;opacity:0.5;margin-top:2px;}
@@ -1692,7 +1773,7 @@ input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:tex
   display:none;align-items:center;justify-content:center;
   padding:24px;background:rgba(0,0,0,0);
   -webkit-backdrop-filter:blur(0px);backdrop-filter:blur(0px);
-  transition:background-color 0.30s ease,backdrop-filter 0.30s ease,-webkit-backdrop-filter 0.30s ease;pointer-events:none;
+  transition:background-color 0.30s ease;pointer-events:none;
 }
 .win-modal.open{display:flex;pointer-events:auto;}
 .win-modal.in{background:rgba(0,0,0,0.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
@@ -1700,8 +1781,7 @@ input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:tex
   width:min(360px,92vw);max-height:84vh;overflow-y:auto;
   overscroll-behavior:contain;
   padding:18px 18px 16px;border-radius:22px;color:var(--fg);
-  transform:scale(0.94) translateY(12px);
-  transition:transform 0.32s cubic-bezier(0.34,1.30,0.64,1);
+  transition:none;
 }
 .win-modal.in .win-panel{transform:none;}
 .win-panel.win-wide{width:min(430px,94vw);}
@@ -1781,13 +1861,15 @@ input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:tex
 /* peek: while a window's own slider is dragged, fade the window and its
    dimmer so the live widget behind it is visible */
 .win-modal.peek,
-body.glass-liquid .win-modal.in.peek{background:rgba(0,0,0,0.04);-webkit-backdrop-filter:none;backdrop-filter:none;transition:background 0.12s ease;}
+body.glass-liquid .win-modal.in.peek{background:rgba(0,0,0,0.04);-webkit-backdrop-filter:none !important;backdrop-filter:none !important;transition:background 0.12s ease;}
 .win-modal.in.peek .win-panel{
+  /* `!important` clears the inline liquid-lens backdrop-filter, so the panel
+     truly loses its blur while a slider inside it is dragged */
   opacity:1;
-  background:transparent;
-  border-color:transparent;
-  -webkit-backdrop-filter:none;backdrop-filter:none;
-  box-shadow:none;
+  background:transparent !important;
+  border-color:transparent !important;
+  -webkit-backdrop-filter:none !important;backdrop-filter:none !important;
+  box-shadow:none !important;
   transition:background 0.12s ease;
 }
 .win-modal.in.peek .win-panel::after{opacity:0;}
@@ -1921,17 +2003,59 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
 .ww-field{margin-bottom:10px;}
 .ww-link{display:inline-block;font-size:11px;color:#9fe0ff;text-decoration:none;border-bottom:1px solid rgba(159,224,255,0.35);}
 .ww-link:hover{color:#fff;border-color:#fff;}
+.ww-link[hidden]{display:none;}
 
 /* segmented control */
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;padding:3px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.08);box-shadow:inset 0 1px 2px rgba(0,0,0,0.20);}
 .seg-btn{padding:6px 10px;border-radius:999px;background:transparent;border:none;color:color-mix(in srgb,var(--fg) 60%,transparent);font-size:11px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background 0.2s ease,color 0.2s ease,box-shadow 0.2s ease;}
 .seg-btn:hover{color:var(--fg);}
 .seg-btn.on{color:#fff;font-weight:600;background:linear-gradient(180deg,rgba(255,255,255,0.30),rgba(255,255,255,0.20));box-shadow:0 1px 3px rgba(0,0,0,0.30),inset 0 1px 0 rgba(255,255,255,0.35);}
+/* speed: ten tight steps, still the same pill segmented look */
+.seg.step{padding:3px;}
+.seg.step .seg-btn{padding:6px 1px;font-size:10px;letter-spacing:-0.2px;}
 
 /* flow-direction pad: a little arrow grid, no text to translate */
 .flowpad{display:grid;grid-template-columns:repeat(3,40px);grid-auto-rows:34px;gap:3px;justify-content:center;padding:3px;border-radius:14px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.08);width:max-content;margin:0 auto;}
 .flowpad .seg-btn{border-radius:9px;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;}
 .flowpad .flow-spacer{visibility:hidden;}
+.wave-dial{
+  position:relative;
+  display:inline-block;
+  flex:0 0 22px;
+  width:22px;
+  height:22px;
+  box-sizing:border-box;
+  border:1px solid currentColor;
+  border-radius:50%;
+  opacity:.7;
+  vertical-align:middle;
+  pointer-events:none;
+  transform:rotate(40deg);
+  transform-origin:50% 50%;
+}
+.wave-dial::before{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:50%;
+  height:1.5px;
+  margin-top:-.75px;
+  background:currentColor;
+  border-radius:1px;
+  transform-origin:0 50%;
+}
+.wave-dial::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:3px;
+  height:3px;
+  margin:-1.5px 0 0 -1.5px;
+  background:currentColor;
+  border-radius:50%;
+}
 
 /* calendar window */
 #calendar-modal .win-panel{width:min(var(--calwin-w,360px),92vw);}
@@ -1941,6 +2065,12 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
 .calwin-grid .cal-day{font-size:var(--calwin-day-size,12px);min-height:calc(var(--calwin-day-size,12px) * 2.5);border-radius:9px;}
 .calwin-grid .cal-dow{font-size:calc(var(--calwin-day-size,12px) * 0.72);padding-bottom:4px;}
 .calwin-grid .cal-day.today{background:rgba(90,200,250,0.30);box-shadow:inset 0 0 0 1px rgba(90,200,250,0.55);color:#fff;font-weight:600;}
+.calwin-hols{display:flex;flex-direction:column;gap:2px;margin:10px 0 2px;max-height:104px;overflow:auto;}
+.calwin-hols:empty{display:none;}
+.calwin-hol{display:flex;gap:10px;align-items:baseline;font-size:11px;line-height:1.45;color:rgba(255,255,255,0.72);}
+.calwin-hol-d{flex-shrink:0;width:22px;text-align:right;color:rgba(255,214,140,0.92);font-variant-numeric:tabular-nums;font-weight:600;}
+.calwin-hol-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.calwin-hol.empty{opacity:0.4;font-size:10.5px;}
 @keyframes calin-spring{from{opacity:0;transform:translateY(10px) scale(0.97);}to{opacity:1;transform:none;}}
 @keyframes calin-fade{from{opacity:0;}to{opacity:1;}}
 @keyframes calin-slide{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:none;}}
@@ -2048,25 +2178,6 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
 </head>
 <body>
 
-<!-- Liquid Glass: a single displacement map (generated once at runtime and set
-     on #lg-map) bends the backdrop at the rim so the edge reads as a lens.
-     Only body.glass-liquid ever references it; Classic never loads it, and a
-     sheet or dialog never uses it at all (it has no wallpaper behind it). -->
-<svg class="lg-defs" width="0" height="0" aria-hidden="true" focusable="false">
-  <defs>
-    <!-- Region is the exact border box. One displacement pass, sampling INWARD
-         (the map pushes toward the centre), so the rim never reaches outside
-         the element's backdrop — that was what painted the black bands and the
-         colour fringes. Blur is done by CSS (compositor) before this filter. -->
-    <filter id="lg-lens" x="0%" y="0%" width="100%" height="100%"
-            color-interpolation-filters="sRGB">
-      <feImage id="lg-map" x="0" y="0" width="100%" height="100%"
-               preserveAspectRatio="none" result="map"/>
-      <feDisplacementMap in="SourceGraphic" in2="map" scale="20"
-                         xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-  </defs>
-</svg>
 
 <video id="background" autoplay loop muted playsinline disablepictureinpicture disableremoteplayback></video>
 <div id="fallback-bg" aria-hidden="true"></div>
@@ -2092,6 +2203,7 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
   <div class="w-body">
     <div class="cal-head"><span id="cal-month">—</span><span id="cal-year"></span></div>
     <div class="cal-grid" id="cal-grid"></div>
+    <div class="cal-hol" id="cal-hol" hidden></div>
   </div>
 </div>
 
@@ -2134,6 +2246,22 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
     <div class="w-sub"><span id="w-desc">Weather</span><span id="w-rain"></span></div>
     <div class="w-raintime" id="w-raintime"></div>
     <div class="w-updated" id="w-updated"></div>
+    <a id="w-src" class="w-src" href="https://data.bmkg.go.id/prakiraan-cuaca" target="_blank" rel="noopener" hidden>Sumber: BMKG</a>
+  </div>
+</div>
+
+<!-- stocks -->
+<div id="stocks" class="draggable glass">
+  <div class="drag-handle"></div>
+  <button id="stocks-refresh" class="quote-refresh" title="Update watchlist" aria-label="Update watchlist">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+    </svg>
+  </button>
+  <div class="w-body">
+    <div class="sk-head"><span class="sk-title" id="sk-title">Markets</span><span class="sk-note" id="sk-note">Delayed</span></div>
+    <div class="sk-list" id="sk-list"></div>
+    <div class="sk-src" id="sk-src">Source: Yahoo Finance</div>
   </div>
 </div>
 
@@ -2355,7 +2483,7 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
             <label class="lbl">Hour format</label>
             <select class="fi" id="ihour">
               <option value="12">12-hour (9:35 PM)</option>
-              <option value="24">24-hour (21:35)</option>
+              <option value="24" selected>24-hour (21:35)</option>
             </select>
           </div>
           <div>
@@ -2439,7 +2567,44 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
             <button class="seg-btn" data-glass="classic" type="button">Classic</button>
             <button class="seg-btn" data-glass="liquid" type="button">Liquid Glass</button>
           </div>
-          <p class="hint">Liquid Glass gives the edges a soft lens and a hint of colour, the way Apple&rsquo;s glass does. Classic keeps the calm frosted blur.</p>
+          <p class="hint">Liquid Glass bends whatever sits behind each surface at the rim, the way real glass refracts the scene. It works on the video wallpaper and on the built-in gradient. Classic keeps the calm frosted blur.</p>
+        </div>
+        <div id="lens-block">
+          <div class="toggle-row">
+            <div>
+              <label for="lens-custom">Custom lens</label>
+              <div class="hint">Off keeps the recommended lens. On lets you fine-tune it.</div>
+            </div>
+            <label class="tog"><input type="checkbox" id="lens-custom"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div id="lens-tuning" style="display:none">
+            <label class="lbl">Lens strength</label>
+            <div class="pos-row" style="margin-bottom:0">
+              <label>Strength</label>
+              <input type="range" id="ilenspeak" min="0" max="85" value="17" style="width:100%;accent-color:#5ac8fa">
+              <span id="ilenspeak-v">17%</span>
+            </div>
+            <label class="lbl" style="margin-top:8px">Lens edge width</label>
+            <div class="pos-row" style="margin-bottom:0">
+              <label>Edge</label>
+              <input type="range" id="ilensedge" min="0" max="40" value="25" style="width:100%;accent-color:#5ac8fa">
+              <span id="ilensedge-v">25px</span>
+            </div>
+            <label class="lbl" style="margin-top:8px">Lens spread</label>
+            <div class="pos-row" style="margin-bottom:0">
+              <label>Spread</label>
+              <input type="range" id="ilensspread" min="10" max="250" value="140" style="width:100%;accent-color:#5ac8fa">
+              <span id="ilensspread-v">140%</span>
+            </div>
+            <label class="lbl" style="margin-top:8px">Lens zoom</label>
+            <div class="pos-row" style="margin-bottom:0">
+              <label>Zoom</label>
+              <input type="range" id="ilenszoom" min="0" max="35" value="24" style="width:100%;accent-color:#5ac8fa">
+              <span id="ilenszoom-v">24%</span>
+            </div>
+            <button class="sbtn" id="lens-reset" type="button" style="width:auto;margin-top:12px;padding:9px 14px">Reset lens</button>
+            <p class="hint">Only Liquid Glass uses these. <b>Strength</b> is how far the rim bends the background. <b>Edge</b> is the rim width (Auto follows the card). <b>Spread</b> is how far the bend reaches inward &mdash; lower keeps the middle flat and calm, higher makes the whole card softly curved. <b>Zoom</b> gently magnifies the backdrop in the middle, so the glass reads as a lens.</p>
+          </div>
         </div>
         <div>
           <label class="lbl">Tint mode</label>
@@ -2568,7 +2733,7 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
         <div class="sect">Wallpaper</div>
         <div class="wall-grid" id="wall-grid">
           <div class="wall-card" data-wall="gradient" role="button" tabindex="0">
-            <span class="wall-title">Calm Gradient</span>
+            <span class="wall-title">Calm Wave</span>
           </div>
           <div class="wall-card" data-wall="video" role="button" tabindex="0">
             <span class="wall-title">Video Wallpaper</span>
@@ -2617,24 +2782,59 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
 
         <div id="gradient-options">
           <div class="pdiv"></div>
-          <div class="sect">Gradient colours</div>
+          <div class="sect">Wave colours</div>
           <p class="hint">Pick a colour scheme.</p>
           <div class="grad-grid" id="grad-grid"></div>
 
-          <div class="sect" style="margin-top:14px;">Gradient motion</div>
+          <div class="sect" style="margin-top:14px;">Wave motion</div>
           <div class="seg" id="motion-seg">
             <button class="seg-btn" data-motion="still" type="button">Still</button>
-            <button class="seg-btn" data-motion="slow" type="button">Slow</button>
-            <button class="seg-btn" data-motion="flow" type="button">Flowing</button>
+            <button class="seg-btn" data-motion="flow" type="button">Wave</button>
           </div>
-          <div class="pos-row" style="margin-top:10px;margin-bottom:0;">
-            <label>Speed</label>
-            <input type="range" id="imotionspeed" min="1" max="100" value="60">
-            <span id="imotionspeed-v">60%</span>
+          <div id="flow-move-wrap">
+            <label class="lbl" style="margin-top:10px;">Speed</label>
+            <div class="seg step" id="motion-speed-seg" role="group" aria-label="Wave speed">
+              <button class="seg-btn" data-speed="10" type="button">10%</button>
+              <button class="seg-btn" data-speed="20" type="button">20%</button>
+              <button class="seg-btn" data-speed="30" type="button">30%</button>
+              <button class="seg-btn" data-speed="40" type="button">40%</button>
+              <button class="seg-btn" data-speed="50" type="button">50%</button>
+              <button class="seg-btn" data-speed="60" type="button">60%</button>
+              <button class="seg-btn" data-speed="70" type="button">70%</button>
+              <button class="seg-btn" data-speed="80" type="button">80%</button>
+              <button class="seg-btn" data-speed="90" type="button">90%</button>
+              <button class="seg-btn" data-speed="100" type="button">100%</button>
+            </div>
+            <label class="lbl" style="margin-top:12px;">Drift direction</label>
+            <div class="flowpad" id="flow-seg"></div>
           </div>
-          <label class="lbl" style="margin-top:12px;">Flow direction</label>
-          <div class="flowpad" id="flow-seg"></div>
-          <p class="hint">Slow and Flowing let the colours drift without a video &mdash; slide Speed for a livelier drift, and point the arrows the way the waves should travel. Either way it rests while the tab is hidden.</p>
+          <label class="lbl" style="margin-top:12px;">Wave direction</label>
+          <div class="pos-row" style="grid-template-columns:60px 1fr 36px 22px;margin-top:6px;margin-bottom:0;">
+            <label>Angle</label>
+            <input type="range" id="iwavedir" min="0" max="359" step="1" value="40">
+            <span id="iwavedir-v">40&deg;</span>
+            <span class="wave-dial" id="wavedir-dial" aria-hidden="true"></span>
+          </div>
+          <p class="hint">Rotates the wave shape itself, independent of the drift.</p>
+          <label class="lbl" style="margin-top:12px;">Wave zoom &amp; pan</label>
+          <div class="pos-row" style="margin-top:6px;margin-bottom:0;">
+            <label>Zoom</label>
+            <input type="range" id="iwavezoom" min="100" max="250" step="1" value="100">
+            <span id="iwavezoom-v">100%</span>
+          </div>
+          <div class="pos-row">
+            <label>Left</label>
+            <input type="range" id="iwavex" min="-600" max="600" step="1" value="0">
+            <span id="iwavex-v">0</span>
+          </div>
+          <div class="pos-row">
+            <label>Up</label>
+            <input type="range" id="iwavey" min="-600" max="600" step="1" value="0">
+            <span id="iwavey-v">0</span>
+          </div>
+          <p class="hint">Wave lets the colours drift without a video &mdash; slide Speed for a livelier drift, and point the arrows the way the waves should travel. Either way it rests while the tab is hidden.</p>
+          <button class="sbtn" id="bresetflow" type="button" style="margin-top:10px;">Reset Calm Wave to default</button>
+          <p class="hint">Reset returns the wallpaper to Reze, Wave, 50%, drifting right to left, 40&deg; with no zoom.</p>
         </div>
       </div>
 
@@ -2678,6 +2878,34 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
               <span id="icalsize-w-v">9px</span>
             </div>
             <p class="hint">Resizes the calendar everywhere — the card, the numbers inside it, and the calendar window. Handy on a big monitor.</p>
+          </div>
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">✦</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-holidays">Public holidays</label>
+              <span class="wrow-desc">Mark days off on both calendars.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-holidays"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wsub">
+            <div class="wsub-row">
+              <label for="iholidaycountry">Country</label>
+              <select class="fi" id="iholidaycountry" style="width:172px;padding:6px 28px 6px 10px;font-size:11px;">
+                <option value="">Follow weather city</option>
+                <option value="ID">Indonesia</option>
+                <option value="US">United States</option>
+                <option value="GB">United Kingdom</option>
+                <option value="SG">Singapore</option>
+                <option value="MY">Malaysia</option>
+                <option value="AU">Australia</option>
+                <option value="CA">Canada</option>
+                <option value="DE">Germany</option>
+                <option value="FR">France</option>
+                <option value="JP">Japan</option>
+                <option value="IN">India</option>
+              </select>
+            </div>
+            <p class="hint">Holidays are fetched for the calendar's year and cached. Off by default; any failure stays quiet.</p>
           </div>
           <div class="wrow">
             <span class="wrow-ico" aria-hidden="true">☁︎</span>
@@ -2750,6 +2978,33 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
               <span class="wrow-desc">Network, device and storage in one place.</span>
             </span>
             <label class="tog"><input type="checkbox" id="w-status"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wrow">
+            <span class="wrow-ico" aria-hidden="true">↗</span>
+            <span class="wrow-text">
+              <label class="wrow-name" for="w-stocks">Stocks</label>
+              <span class="wrow-desc">A small watchlist, gently refreshed.</span>
+            </span>
+            <label class="tog"><input type="checkbox" id="w-stocks"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+          </div>
+          <div class="wsub">
+            <div class="seg" id="istocksmarket" style="margin-bottom:2px;">
+              <button class="seg-btn" data-market="stock" type="button">Stocks</button>
+              <button class="seg-btn" data-market="crypto" type="button">Crypto</button>
+            </div>
+            <div class="wsub-row" style="align-items:flex-start;">
+              <label for="istockslist" style="padding-top:6px;">Symbols</label>
+              <input class="fi" id="istockslist" type="text" placeholder="^JKSE, BBCA.JK, AAPL" autocomplete="off" style="flex:1;padding:7px 10px;font-size:11px;">
+            </div>
+            <div class="wsub-row">
+              <label for="istocksevery">Refresh (minutes)</label>
+              <input class="fi" id="istocksevery" type="number" min="1" max="60" step="1" value="5" style="width:74px;padding:6px 8px;font-size:11px;">
+            </div>
+            <div class="wsub-row">
+              <label for="istockscurrency">Currency</label>
+              <select class="fi" id="istockscurrency" data-rows="5" style="flex:1;padding:6px 8px;font-size:11px;"></select>
+            </div>
+            <p class="hint">Comma-separated Yahoo symbols (<strong style="color:rgba(255,255,255,0.7)">AAPL</strong>, <strong style="color:rgba(255,255,255,0.7)">BBCA.JK</strong>, <strong style="color:rgba(255,255,255,0.7)">BTC-USD</strong>). Stocks and Crypto keep separate lists; stock prices follow their exchange session while crypto is live, and refreshing pauses with the tab.</p>
           </div>
         </div>
 
@@ -2917,7 +3172,7 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
       <div class="pane" id="pane-info">
         <div style="text-align:center;padding:4px 0 12px;">
           <div style="font-size:19px;font-weight:600;letter-spacing:0.01em;">
-            Newly <span class="badge" id="version-badge" role="button" tabindex="0" title="View changelog" style="cursor:pointer">2.1</span>
+            Newly <span class="badge" id="version-badge" role="button" tabindex="0" title="View changelog" style="cursor:pointer">2.2</span>
           </div>
           <div class="hint" style="margin-top:4px;">Liquid Glass · a wallpaper you choose · local-first</div>
           <div class="hint" style="margin-top:8px;font-style:italic;">Feel free to modify, remix and share it.</div>
@@ -3061,8 +3316,8 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
       <section class="ob-step" data-step="4" hidden>
         <label class="lbl">How should the clock read?</label>
         <div class="seg" id="ob-hour">
-          <button class="seg-btn on" data-hour="12" type="button">12-hour</button>
-          <button class="seg-btn" data-hour="24" type="button">24-hour</button>
+          <button class="seg-btn" data-hour="12" type="button">12-hour</button>
+          <button class="seg-btn on" data-hour="24" type="button">24-hour</button>
         </div>
         <label class="lbl" style="margin-top:12px;">Where should the time come from?</label>
         <div class="seg" id="ob-timesrc">
@@ -3134,7 +3389,7 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
       <section class="ob-step" data-step="8" hidden>
         <label class="lbl">A wallpaper to start with</label>
         <div class="seg" id="ob-wall">
-          <button class="seg-btn on" data-wall="gradient" type="button">Calm Gradient</button>
+          <button class="seg-btn on" data-wall="gradient" type="button">Calm Wave</button>
           <button class="seg-btn" data-wall="video" type="button">Video</button>
         </div>
         <div id="ob-grad-wrap" style="margin-top:10px;">
@@ -3142,16 +3397,32 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
           <label class="lbl" style="margin-top:10px;">Drift</label>
           <div class="seg" id="ob-motion">
             <button class="seg-btn" data-motion="still" type="button">Still</button>
-            <button class="seg-btn on" data-motion="slow" type="button">Slow</button>
-            <button class="seg-btn" data-motion="flow" type="button">Flowing</button>
+            <button class="seg-btn on" data-motion="flow" type="button">Wave</button>
           </div>
-          <div class="pos-row" style="margin-top:8px;margin-bottom:0;">
-            <label>Speed</label>
-            <input type="range" id="ob-motion-speed" min="1" max="100" value="60">
-            <span id="ob-motion-speed-v">60%</span>
+          <div id="ob-flow-move-wrap">
+            <label class="lbl" style="margin-top:10px;">Speed</label>
+            <div class="seg step" id="ob-motion-speed-seg" role="group" aria-label="Wave speed">
+              <button class="seg-btn" data-speed="10" type="button">10%</button>
+              <button class="seg-btn" data-speed="20" type="button">20%</button>
+              <button class="seg-btn" data-speed="30" type="button">30%</button>
+              <button class="seg-btn" data-speed="40" type="button">40%</button>
+              <button class="seg-btn" data-speed="50" type="button">50%</button>
+              <button class="seg-btn" data-speed="60" type="button">60%</button>
+              <button class="seg-btn" data-speed="70" type="button">70%</button>
+              <button class="seg-btn" data-speed="80" type="button">80%</button>
+              <button class="seg-btn" data-speed="90" type="button">90%</button>
+              <button class="seg-btn" data-speed="100" type="button">100%</button>
+            </div>
+            <label class="lbl" style="margin-top:10px;">Drift direction</label>
+            <div class="flowpad" id="ob-flow-seg"></div>
           </div>
-          <label class="lbl" style="margin-top:10px;">Flow direction</label>
-          <div class="flowpad" id="ob-flow-seg"></div>
+          <label class="lbl" style="margin-top:10px;">Wave direction</label>
+          <div class="pos-row" style="grid-template-columns:60px 1fr 36px 22px;margin-top:6px;margin-bottom:0;">
+            <label>Angle</label>
+            <input type="range" id="ob-wavedir" min="0" max="359" step="1" value="40">
+            <span id="ob-wavedir-v">40&deg;</span>
+            <span class="wave-dial" id="ob-wavedir-dial" aria-hidden="true"></span>
+          </div>
         </div>
         <div id="ob-vid-wrap" style="margin-top:10px;display:none;">
           <div class="ob-drop" id="ob-vdrop">
@@ -3163,12 +3434,31 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
           <div class="ob-vstatus" id="ob-vstatus"></div>
           <button class="mini-btn" id="ob-vclear" type="button" style="display:none;margin:6px auto 0;">Remove video</button>
         </div>
-        <p class="hint" id="ob-wall-hint">Calm Gradient is soft and light on the battery.</p>
+        <p class="hint" id="ob-wall-hint">Calm Wave is a soft, flowy wave — easy on the battery.</p>
+      </section>
+
+      <section class="ob-step" data-step="9" hidden>
+        <label class="lbl">A couple of calm extras</label>
+        <div class="wrow" style="padding:2px 0;">
+          <span class="wrow-text">
+            <label class="wrow-name" for="ob-stocks">Stocks watchlist</label>
+            <span class="wrow-desc">IHSG and a few symbols, quietly refreshed.</span>
+          </span>
+          <label class="tog"><input type="checkbox" id="ob-stocks"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+        </div>
+        <div class="wrow" style="padding:2px 0;">
+          <span class="wrow-text">
+            <label class="wrow-name" for="ob-holidays">Public holidays</label>
+            <span class="wrow-desc">Mark days off on both calendars.</span>
+          </span>
+          <label class="tog"><input type="checkbox" id="ob-holidays"><span class="tog-track"></span><span class="tog-thumb"></span></label>
+        </div>
+        <p class="hint">Both are off by default. Change them any time in Settings.</p>
       </section>
     </div>
 
     <div class="ob-dots" aria-hidden="true">
-      <span class="on"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      <span class="on"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
     </div>
 
     <div class="ob-foot">
@@ -3213,9 +3503,59 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;">
-      <a class="ww-link" id="ww-link" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo ↗</a>
+      <a class="ww-link" id="ww-link" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Source: Open-Meteo ↗</a>
+      <a class="ww-link" id="ww-src" href="https://data.bmkg.go.id/prakiraan-cuaca" target="_blank" rel="noopener noreferrer" hidden>Sumber: BMKG ↗</a>
       <button class="mini-btn" id="ww-refresh" type="button">Update now</button>
     </div>
+  </div>
+</div>
+
+<!-- stocks window -->
+<div id="stocks-modal" class="win-modal" aria-hidden="true">
+  <div class="win-panel glass" role="dialog" aria-modal="true" aria-labelledby="stockswin-title">
+    <div class="sp-head">
+      <div>
+        <div class="sp-title" id="stockswin-title">Markets</div>
+        <div class="win-sub" id="stockswin-sub">Delayed data · Yahoo Finance</div>
+      </div>
+      <button class="xbtn" id="stockswin-close" title="Close" aria-label="Close markets">✕</button>
+    </div>
+
+    <div class="seg" id="stockswin-market">
+      <button class="seg-btn" data-market="stock" type="button">Stocks</button>
+      <button class="seg-btn" data-market="crypto" type="button">Crypto</button>
+    </div>
+
+    <div class="sk-win-list" id="stockswin-list"></div>
+
+    <div class="sk-win-add">
+      <input class="fi" id="stockswin-input" type="text" placeholder="Add symbol, e.g. NVDA" autocomplete="off" maxlength="14">
+      <button class="sbtn" id="stockswin-add" type="button" style="width:auto;padding:9px 16px;flex-shrink:0;">Add</button>
+    </div>
+
+    <div class="row2" style="margin-top:12px;">
+      <div>
+        <label class="lbl">Refresh (minutes)</label>
+        <input class="fi" id="stockswin-every" type="number" min="1" max="60" step="1" value="5">
+      </div>
+      <div>
+        <label class="lbl">Currency</label>
+        <select class="fi" id="stockswin-currency" data-rows="5" aria-label="Display currency"></select>
+      </div>
+    </div>
+
+    <div class="row2" style="margin-top:10px;">
+      <div>
+        <label class="lbl">Last updated</label>
+        <div class="sk-win-updated" id="stockswin-updated">—</div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;">
+      <span class="sk-win-src" id="stockswin-src">Yahoo Finance</span>
+      <button class="mini-btn" id="stockswin-refresh" type="button">Update now</button>
+    </div>
+    <p class="hint">Prices refresh only while this page is open. Stocks show the last close when their exchange is closed; crypto trades around the clock. Remove a symbol with its ✕.</p>
   </div>
 </div>
 
@@ -3235,6 +3575,7 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
       <button class="mini-btn" id="calwin-next" type="button" aria-label="Next month">›</button>
     </div>
     <div class="calwin-grid" id="calwin-grid"></div>
+    <div class="calwin-hols" id="calwin-hols"></div>
     <div class="seg" id="calwin-source">
       <button class="seg-btn" data-src="device" type="button">This device</button>
       <button class="seg-btn" data-src="city" type="button">Weather city</button>
@@ -3264,7 +3605,7 @@ body.search-active #search-dim{opacity:1;pointer-events:auto;}
         <label class="lbl">Hour format</label>
         <select class="fi" id="clockwin-hour">
           <option value="12">12-hour</option>
-          <option value="24">24-hour</option>
+          <option value="24" selected>24-hour</option>
         </select>
       </div>
       <div>

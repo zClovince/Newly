@@ -1,4 +1,5 @@
 # Newly
+<img width="1899" height="798" alt="image" src="https://github.com/user-attachments/assets/c121ff59-04e9-42b6-a552-46ae7813430b" />
 
 A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you choose, weather, clock, calendar, quotes, shortcuts and prayer times. Chrome / Brave / Edge and Firefox 128 ESR+ (liquid glass don't work on firefox sadly..) (Manifest V3), from one shared folder.
 

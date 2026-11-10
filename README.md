@@ -4,29 +4,6 @@ A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you ch
 
 **Download:** [HERE!](https://github.com/zClovince/Newly/Releases) — free, source included, fork it and make it yours.
 
-### What's new in 2.2 — Polish
-
-- **Liquid Glass polish** — every card, panel and popup now reflects the scene at all four edges (perhaps will improve it later if found new implemantation)
-- **Weather (BMKG)** —  Weather now fetched from BMKG if Indonesian City is placed,Open-Mateo if the api fail/non Indonesian city was typed.
-- **Stocks/Crypto** — New Stocks / Cyrptocurrency Widget with Realtime Update, fully customizable, Fetched from Yahoo!
-- **Minor Improvement** — Honestly, i'm too lazy to explain it but few re-wording for few feature so it match the whole feature like "Calm Wave" instead old "Calm Flow" 
-- **Fix** — Few polishment to upgrade performance
-
-### What's new in 2.1 — Silk Waves
-
-- **Layered silk-wave gradient** — the Calm Gradient (now is Calm Flow in 2.2) is now a live wallpaper of parallel ribbons tilted to fall from the upper-left to the lower-right, each a flat colour with a soft shadow where it laps over the ribbon behind. Colours ramp from near-black at the back to pale cream at the front, and the whole ramp always spans the window, whatever its size.
-
-
-### What's new in 2.0 — Liquid Glass (Beta)
-
-- **A real glass lens** — behind every card and sheet, the scene is bent through a small SVG displacement lens, not just blurred. The rim gathers the backdrop like a curved pane; the middle stays calm and readable.
-- **Sheets without the flash** — panels no longer fade their opacity on open (which disabled `backdrop-filter` for a moment and showed the wrong, darker glass). The scrim fades its colour instead, and the scene behind a sheet blurs softly on its own layer.
-- **One recipe everywhere** — settings, every widget window, prayer and changelog now share the search bar's scrim-then-sheet structure, so content is readable over any wallpaper.
-- **Apple-style controls** — a thin accent-filled slider with a white capsule thumb, and a pill segmented control with a raised capsule for the selected segment.
-- **Calmer details** — selection boxes and rich dropdowns match the glass, scrollbars stay inside rounded panels, and clock/date option previews show the live time and date.
-- **Fixed** — the calendar follows the chosen time source (device or weather city), and the weather's rain-time line follows 12/24-hour correctly.
-- **Credit** — the design follows Apple's [Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass) guidance; the SVG-displacement approach is inspired by the liquid-glass CSS recipes collected at [freefrontend.com](https://freefrontend.com/). The lens, its runtime map and the sheet structure are Newly's own implementation.
-
 ### So what does Newly do that your default new tab doesn't do??
 
 - **Liquid Glass everywhere** — every card, panel, button and popup is made of the same material, with adjustable blur, tint and thickness. (1.0 was glassmorphism; 2.0 adds the refractive lens.)
@@ -44,9 +21,17 @@ A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you ch
 - **Private by design** — all local: settings in the browser's storage, video in an offline cache. No accounts, no tracking, no GPS. Weather and prayer times send only the city you typed.
 - **One build, two browsers** — the same folder runs in Chrome, Brave, Edge and Firefox. (bug on firefox since it doesn't behave like chromium, sadly it won't work on Safari..)
 
-psstt if you're muslim, you'll love using Qur'an Verse, secret feature will appear (already teased in the upper above tho) 
+psstt if you're muslim, you'll love using Qur'an Verse, secret feature will appear (already teased in the upper above tho)
 
-## Files
+### What's new in 2.2 — Polish
+
+- **Liquid Glass polish** — every card, panel and popup now reflects the scene at all four edges (perhaps will improve it later if found new implemantation)
+- **Weather (BMKG)** —  Weather now fetched from BMKG if Indonesian City is placed,Open-Mateo if the api fail/non Indonesian city was typed.
+- **Stocks/Crypto** — New Stocks / Cyrptocurrency Widget with Realtime Update, fully customizable, Fetched from Yahoo!
+- **Minor Improvement** — Honestly, i'm too lazy to explain it but few re-wording for few feature so it match the whole feature like "Calm Wave" instead old "Calm Flow" 
+- **Fix** — Few polishment to upgrade performance
+
+## Files you'll break if you put pour too much love innit 
 
 - `newtab.html` — markup + styles.
 - `script.js` — everything else (settings, widgets, APIs, backups).

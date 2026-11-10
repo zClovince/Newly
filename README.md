@@ -3,7 +3,7 @@
 
 A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you choose, weather, clock, calendar, quotes, shortcuts and prayer times. Chrome / Brave / Edge and Firefox 128 ESR+ (Manifest V3), from one shared folder.
 
-**Download:** [HERE!](https://github.com/zClovince/Newly/Release) — free, source included, fork it and make it yours.
+**Download:** [HERE!](https://github.com/zClovince/Newly/Releases) — free, source included, fork it and make it yours.
 
 ### What's new in 2.1 — Silk Waves
 
@@ -13,7 +13,7 @@ A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you ch
 - **Fixed** — the earlier gradient only ever showed the middle of its colour ramp, which is what made it look washed out. It now fills the screen edge to edge at every size.
 - **Also** — the calendar resizes from one shared control (Clock pane, Widgets pane and the calendar window), sheets fade their blur in and out, settings and widget windows share one open/close animation, and the greeting auto-fits like the weather and quote cards.
 
-### What's new in 2.0 — Liquid Glass
+### What's new in 2.0 — Liquid Glass (beta)
 
 - **A real glass lens** — behind every card and sheet, the scene is bent through a small SVG displacement lens, not just blurred. The rim gathers the backdrop like a curved pane; the middle stays calm and readable.
 - **Sheets without the flash** — panels no longer fade their opacity on open (which disabled `backdrop-filter` for a moment and showed the wrong, darker glass). The scrim fades its colour instead, and the scene behind a sheet blurs softly on its own layer.

@@ -3,7 +3,7 @@
 
 A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you choose, weather, clock, calendar, quotes, shortcuts and prayer times. Chrome / Brave / Edge and Firefox 128 ESR+ (liquid glass don't work on firefox sadly..) (Manifest V3), from one shared folder.
 
-**Download:** [HERE!](https://github.com/zClovince/Newly/Releases) — free, source included, fork it and make it yours.
+**Download:** [HERE!](https://github.com/zClovince/Newly/releases) — free, source included, fork it and make it yours.
 
 ### So what does Newly do that your default new tab doesn't do??
 

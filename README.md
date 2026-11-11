@@ -1,11 +1,11 @@
 # Newly
 <img width="1899" height="798" alt="image" src="https://github.com/user-attachments/assets/c121ff59-04e9-42b6-a552-46ae7813430b" />
 
-A calm, glassy new tab page with an Apple Liquid Glass UI — a wallpaper you choose, weather, clock, calendar, quotes, shortcuts and prayer times. Chrome / Brave / Edge and Firefox 128 ESR+ (liquid glass don't work on firefox sadly..) (Manifest V3), from one shared folder.
+A calm, glassy new tab page with an Apple Liquid Glass UI (inspired) — a wallpaper you choose, weather, clock, calendar, quotes, shortcuts and prayer times. Chrome / Brave / Edge and Firefox 128 ESR+ (liquid glass don't work on firefox sadly..) (Manifest V3), from one shared folder.
 
 **Download:** [HERE!](https://github.com/zClovince/Newly/releases) — free, source included, fork it and make it yours.
 
-### So what does Newly do that your default new tab doesn't do??
+### So what does Newly do that your default new tab don't??
 
 - **Liquid Glass everywhere** — every card, panel, button and popup is made of the same material, with adjustable blur, tint and thickness. (1.0 was glassmorphism; 2.0 adds the refractive lens.)
 - **A wallpaper you choose** — **Calm Flow** (a still, soft colour scheme that asks a little less of your battery) **or??**

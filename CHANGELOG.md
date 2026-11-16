@@ -5,28 +5,34 @@ This file is included in every release ZIP, so the history travels with the exte
 
 ---
 
-### What's new in 2.2 — Polish
+## What's new in 2.3 — Small Mistake update
+
+- **Calmer Start:** A new loading screen now greets you when the extension boots, easing the page in before your widgets settle.
+- **Polishment Again:** Smarter market statuses (open, closed, weekend or holiday), a currency converter that follows your city for easier reading, public-holiday fixes on the calendar, and shortcut tiles that re-adjust more cleanly — including using your own custom icon when the favicon fails to load.
+
+---
+
+## What's new in 2.2 — Polish
 
 - **Liquid Glass polish** — every card, panel and popup now reflects the scene at all four edges (perhaps will improve it later if found new implemantation)
 - **Weather (BMKG)** —  Weather now fetched from BMKG if Indonesian City is placed,Open-Mateo if the api fail/non Indonesian city was typed.
 - **Stocks/Crypto** — New Stocks / Cyrptocurrency Widget with Realtime Update, fully customizable, Fetched from Yahoo!
 - **Minor Improvement** — Honestly, i'm too lazy to explain it but few re-wording for few feature so it match the whole feature like "Calm Wave" instead old "Calm Flow" 
 - **Fix** — Few polishment to upgrade performance
+
 ---
 
-### What's new in 2.1 — Silk Waves
+## What's new in 2.1 — Silk Waves
 
-- **Layered silk-wave gradient** — the Calm Gradient (now is Calm Flow in 2.2) is now a live wallpaper of parallel ribbons tilted to fall from the upper-left to the lower-right, each a flat colour with a soft shadow where it laps over the ribbon behind. Colours ramp from near-black at the back to pale cream at the front, and the whole ramp always spans the window, whatever its size.
+- **A living gradient:** the Calm Gradient is now layered silk waves — parallel ribbons tilted to fall from upper-left to lower-right, each a flat colour with a soft shadow where it laps over the ribbon behind, ramping from near-black at the back to pale cream at the front. The whole dark-to-light range always spans the window, whatever its size.
+- **One clean loop:** the field is a single SVG slid exactly one wavelength along the ribbons on the compositor — seamless, no desync, no colour snap, calm on the battery.
+- **Aim and pace it:** pick one of eight flow directions (left/right glide continuously, the other six rock gently) and set the speed from a calm crawl to a lively flow.
+- **Resizable calendar:** one shared size control drives the Clock pane, the Widgets pane and the calendar window.
+- **Calmer sheets and windows:** scrim blur fades in and out, settings and widget windows share one open/close animation, and every widget animates together on a browser resize. The greeting auto-fits like the weather and quote cards.
+- **Fixed:** the old gradient only showed the middle of its colour ramp — which is what made it look washed out. It now fills the screen edge to edge.
+- **Design** follows Apple's Adopting Liquid Glass guidance; the wave field and lens are our own.
 
-### Also in this release
-
-- **Resizable calendar.** One shared calendar size now drives the Clock pane, the Widgets pane and the calendar window itself, so the whole calendar scales from one control.
-- **Smoother windows.** Settings and every widget window share one open/close animation, and all widgets animate together during a browser resize — opening a window no longer drops frames or flickers.
-- **Greeting auto-fit.** The greeting widget now sizes itself like the weather and quote cards.
-
-### Fixed
-
-- **No more washed-out gradient.** The previous calm-gradient field only spanned the colours it generated locally, so on some window sizes only the middle of the ramp was ever on screen. The screen-space rewrite keeps the full dark-to-light range visible at every size.
+Free, local, no accounts, no tracking, no GPS. CC0. Chrome, Brave, Edge and Firefox 128+.
 
 ---
 

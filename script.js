@@ -6,7 +6,7 @@
 ══════════════════════════════════════════ */
 var K = {
   name:'nt_name', style:'nt_greet_style', customGreet:'nt_custom_greet',
-  sc:'nt_shortcuts', fav:'nt_favicon', browserIcon:'nt_browser_icon',
+  sc:'nt_shortcuts', scSeed:'nt_sc_seed', fav:'nt_favicon', browserIcon:'nt_browser_icon',
   font:'nt_font', customFont:'nt_custom_font',
   browser:'nt_browser', browserCustom:'nt_browser_custom',
   clockStyle:'nt_clock_style', hourFmt:'nt_hour_fmt',
@@ -38,6 +38,7 @@ var K = {
   showStocks:'nt_show_stocks', stocksList:'nt_stocks_list', stocksCache:'nt_stocks_cache', stocksEvery:'nt_stocks_every',
   stocksMarket:'nt_stocks_market', cryptoList:'nt_crypto_list',
   stocksCurrency:'nt_stocks_currency', fxCache:'nt_fx_cache',
+  fxBase:'nt_fx_base', fxQuote:'nt_fx_quote', fxConvCache:'nt_fx_conv_cache',
   prayerRemind:'nt_prayer_remind', prayerNotified:'nt_prayer_notified',
   prayerSound:'nt_prayer_sound',
   weatherCity:'nt_weather_city', weatherGeo:'nt_weather_geo',
@@ -46,6 +47,7 @@ var K = {
   quoteCat:'nt_quote_cat', quoteCache:'nt_quote_cache',
   quoteEvery:'nt_quote_every', customQuote:'nt_quote_custom', customQuoteAuthor:'nt_quote_custom_author',
   quoteAlign:'nt_quote_align', quoteStyle:'nt_quote_style', quoteSize:'nt_quote_size',
+  quoteWidthInit:'nt_quote_width_init',
   quoteAuthorAlign:'nt_quote_author_align', quoteAuthorStyle:'nt_quote_author_style', quoteAuthorSize:'nt_quote_author_size',
   batterySaver:'nt_battery_saver', pauseHidden:'nt_pause_hidden', gradient:'nt_gradient',
   panelSize:'nt_panel_size', sizes:'nt_sizes',
@@ -87,6 +89,27 @@ function flash(btn,msg){
   var o = btn.textContent;
   btn.textContent = msg;
   setTimeout(function(){ btn.textContent = o; },1400);
+}
+/* one shared tap ripple for the round card refresh buttons */
+function tapRing(btn,ms){
+  if(!btn) return;
+  btn.classList.remove('ring');
+  void btn.offsetWidth;
+  btn.classList.add('ring');
+  if(btn.__ringT) clearTimeout(btn.__ringT);
+  btn.__ringT = setTimeout(function(){ btn.classList.remove('ring'); }, ms || 700);
+}
+/* keep a quick spin visible even when the answer arrives instantly */
+function spinFor(btn,ms,done){
+  if(!btn){ if(done) done(); return function(){}; }
+  var t0 = Date.now();
+  btn.classList.add('spinning');
+  function stop(){
+    var left = (ms || 700) - (Date.now() - t0);
+    if(left > 0) setTimeout(function(){ btn.classList.remove('spinning'); if(done) done(); }, left);
+    else { btn.classList.remove('spinning'); if(done) done(); }
+  }
+  return stop;
 }
 function isShown(id){
   var el = $(id);
@@ -145,10 +168,10 @@ function deleteBlob(cb){
    DATA
 ══════════════════════════════════════════ */
 var DEF_SC = [
-  {label:'Google',  url:'https://www.google.com'},
-  {label:'YouTube', url:'https://www.youtube.com'},
-  {label:'Spotify', url:'https://open.spotify.com'},
-  {label:'ChatGPT', url:'https://chat.openai.com'}
+  {label:'WhatsApp', url:'https://web.whatsapp.com', icon:'icons/whatsapp.png'},
+  {label:'Claude',   url:'https://claude.ai/'},
+  {label:'Spotify',  url:'https://open.spotify.com'},
+  {label:'YouTube',  url:'https://youtube.com/'}
 ];
 
 var BROWSERS = [
@@ -454,6 +477,9 @@ function applyGradient(i){
   var g = GRADIENTS[i] || GRADIENTS[0];
   var root = document.documentElement.style;
   root.setProperty('--grad-bg', bandCss(g));
+  /* the pre-paint veil reads the same ramp, so the fade can never show a
+     colour step between boot.js's guess and the real field */
+  root.setProperty('--boot-grad', bandCss(g));
   applyWave(i);
   /* adaptive glass reads its tint from the scene, so a palette change is a
      tint change — re-derive it quietly on the next frame */
@@ -820,7 +846,18 @@ var LOCAL_QUOTES = {
     {text:'The quieter you become, the more you are able to hear.', author:'Ram Dass'},
     {text:'Amateurs sit and wait for inspiration. The rest of us just get up and go to work.', author:'Stephen King'},
     {text:'A ship in harbor is safe, but that is not what ships are built for.', author:'John A. Shedd'},
-    {text:'Creativity is intelligence having fun.', author:'Albert Einstein'}
+    {text:'Creativity is intelligence having fun.', author:'Albert Einstein'},
+    {text:'It is never too late to be what you might have been.', author:'George Eliot'},
+    {text:'Well done is better than well said.', author:'Benjamin Franklin'},
+    {text:'The only thing we have to fear is fear itself.', author:'Franklin D. Roosevelt'},
+    {text:'Knowledge is power.', author:'Francis Bacon'},
+    {text:'I think, therefore I am.', author:'René Descartes'},
+    {text:'The unexamined life is not worth living.', author:'Socrates'},
+    {text:'Happiness depends upon ourselves.', author:'Aristotle'},
+    {text:'We are what we repeatedly do. Excellence, then, is not an act, but a habit.', author:'Will Durant'},
+    {text:'Not all those who wander are lost.', author:'J.R.R. Tolkien'},
+    {text:'To be yourself in a world that is constantly trying to make you something else is the greatest accomplishment.', author:'Ralph Waldo Emerson'},
+    {text:'Stay hungry, stay foolish.', author:'Stewart Brand'}
   ],
   bible: [
     {text:'The Lord is my shepherd; I shall not want.', author:'Psalm 23:1'},
@@ -1579,13 +1616,13 @@ function applyUiScale(scale, presetKey){
     var w = Math.round(b.w * s + pad.x * (1 - s));
     var h = Math.round(b.h * s + pad.y * (1 - s));
     sizes[id] = {
-      w: Math.max(MIN_W[id] || 120, Math.min(window.innerWidth,  w)),
+      w: Math.max(MIN_W[id] || 120, w),
       /* every widget follows its own content height; a manual resize clears
          this flag so the height the user picked is kept */
       auto: 1
     };
     if(id !== 'quote' && id !== 'weather'){
-      sizes[id].h = Math.max(MIN_H[id] || 60, Math.min(window.innerHeight, h));
+      sizes[id].h = Math.max(MIN_H[id] || 60, h);
     }
   });
   ss(K.sizes, JSON.stringify(sizes));
@@ -1883,6 +1920,9 @@ function refreshTimeSource(){
   scheduleCalendar();   /* repaint on the city's midnight too, not just the device's */
   renderGreeting();
   updateTabName();
+  /* the market rows bake their "Closed 16:15" / "Fetched ... at ..." stamps into
+     their HTML, so a clock-source change has to rebuild them as well */
+  refreshStocksClock();
 }
 /* one place every "time source" control goes through, so the clock, the
    calendar and the settings segments never fall out of step */
@@ -2004,7 +2044,28 @@ function scheduleClock(immediate){
 ══════════════════════════════════════════ */
 function getSC(){
   var a = parseJSON(gs(K.sc),null);
-  if(!Array.isArray(a)) return DEF_SC.map(function(x){ return {label:x.label,url:x.url}; });
+  var fresh = DEF_SC.map(function(x){ return {label:x.label,url:x.url,icon:x.icon || ''}; });
+  if(!Array.isArray(a)){
+    if(!gs(K.scSeed)) ss(K.scSeed,'1');
+    return fresh;
+  }
+  /* one quiet upgrade: an untouched old default set becomes the new one, so
+     people who never customised their shortcuts still get the 2.3 defaults */
+  if(!gs(K.scSeed)){
+    ss(K.scSeed,'1');
+    var old = [
+      ['Google','https://www.google.com'],
+      ['YouTube','https://www.youtube.com'],
+      ['Spotify','https://open.spotify.com'],
+      ['ChatGPT','https://chat.openai.com']
+    ];
+    var same = a.length === old.length;
+    for(var n = 0; same && n < old.length; n++){
+      var x = a[n] || {};
+      if(String(x.label || '') !== old[n][0] || String(x.url || '') !== old[n][1]) same = false;
+    }
+    if(same){ saveSC(fresh); return fresh; }
+  }
   return a;
 }
 function saveSC(a){ ss(K.sc,JSON.stringify(a)); }
@@ -2031,6 +2092,36 @@ function saveFavStore(o){
 }
 var _favPending = {};
 
+/* a favicon service sometimes answers with a solid white square; caching that
+   is what made some tiles look blank, so inspect the picture first */
+function blankFavicon(dataURL){
+  return new Promise(function(resolve){
+    var img = new Image();
+    img.onload = function(){
+      try{
+        var n = 16, c = document.createElement('canvas');
+        c.width = n; c.height = n;
+        var ctx = c.getContext('2d');
+        ctx.clearRect(0,0,n,n);
+        ctx.drawImage(img,0,0,n,n);
+        var d = ctx.getImageData(0,0,n,n).data;
+        var opaque = 0, colored = 0;
+        for(var i = 0; i < d.length; i += 4){
+          if(d[i+3] > 200){
+            opaque++;
+            if(d[i] < 245 || d[i+1] < 245 || d[i+2] < 245) colored++;
+          }
+        }
+        resolve(opaque > (n * n) * 0.9 && colored === 0);
+      }catch(e){
+        resolve(false);   /* cannot inspect it, so trust it */
+      }
+    };
+    img.onerror = function(){ resolve(true); };
+    img.src = dataURL;
+  });
+}
+
 function cacheFavicon(domain,force,cb){
   if(!domain) return;
   if(_favPending[domain]) return;
@@ -2049,18 +2140,21 @@ function cacheFavicon(domain,force,cb){
       fr.readAsDataURL(blob);
     });
   }).then(function(dataURL){
-    var o = favStore();
-    o[domain] = { d:dataURL, ts:Date.now() };
-    /* keep it bounded so localStorage never fills up */
-    var keys = Object.keys(o);
-    if(keys.length > 80){
-      keys.sort(function(a,b){ return (o[a].ts || 0) - (o[b].ts || 0); });
-      while(keys.length > 60) delete o[keys.shift()];
-    }
-    saveFavStore(o);
-    if(cb) cb(dataURL);
+    return blankFavicon(dataURL).then(function(blank){
+      if(blank) throw new Error('blank icon');
+      var o = favStore();
+      o[domain] = { d:dataURL, ts:Date.now() };
+      /* keep it bounded so localStorage never fills up */
+      var keys = Object.keys(o);
+      if(keys.length > 80){
+        keys.sort(function(a,b){ return (o[a].ts || 0) - (o[b].ts || 0); });
+        while(keys.length > 60) delete o[keys.shift()];
+      }
+      saveFavStore(o);
+      if(cb) cb(dataURL);
+    });
   }).catch(function(){
-    /* no permission / offline / blocked: the remote URL stays as fallback */
+    /* no permission / offline / blocked / blank: the letter tile stays */
   }).then(function(){ delete _favPending[domain]; });
 }
 function letterTile(label,url){
@@ -2092,21 +2186,58 @@ function renderSC(){
     var img = document.createElement('img');
     img.alt = sc.label || '';
     img.decoding = 'async';
-    var domain = domainOf(sc.url);
-    var cached = (favStore()[domain] || {}).d;
-    if(cached){
-      img.src = cached;
-    } else {
-      img.src = getIconUrl(sc.url);
-      cacheFavicon(domain,false,function(dataURL){
-        if(img.isConnected) img.src = dataURL;
-      });
-    }
-    img.addEventListener('error',function(){
-      img.remove();
+
+    function showLetter(){
+      if(img.parentNode) img.parentNode.removeChild(img);
       if(!a.querySelector('.sc-letter')) a.appendChild(letterTile(sc.label,sc.url));
-    });
-    a.appendChild(img);
+    }
+    /* no custom picture? keep the automatic favicon flow, but never leave a
+       blank remote image on screen while it is being fetched or if it fails */
+    function showAuto(){
+      var domain = domainOf(sc.url);
+      var cached = (favStore()[domain] || {}).d;
+      img.onerror = showLetter;
+      function useIcon(dataURL){
+        img.src = dataURL;
+        if(!img.parentNode) a.appendChild(img);
+      }
+      function fetchFresh(){
+        if(!a.querySelector('.sc-letter')) a.appendChild(letterTile(sc.label,sc.url));
+        cacheFavicon(domain,false,function(dataURL){
+          if(!a.isConnected || !dataURL) return;
+          img.src = dataURL;
+          var lt = a.querySelector('.sc-letter');
+          if(lt) lt.remove();
+          if(!img.parentNode) a.appendChild(img);
+        });
+      }
+      if(cached){
+        useIcon(cached);
+        /* an older version could have cached a solid white square; check it
+           in the background and quietly fetch a real one if so */
+        blankFavicon(cached).then(function(blank){
+          if(!blank || !a.isConnected) return;
+          var o = favStore();
+          if(o[domain]){ delete o[domain]; saveFavStore(o); }
+          if(img.parentNode) img.parentNode.removeChild(img);
+          fetchFresh();
+        });
+        return;
+      }
+      fetchFresh();
+    }
+
+    if(sc.icon){
+      img.onerror = function(){
+        img.onerror = null;
+        if(img.parentNode) img.parentNode.removeChild(img);
+        showAuto();
+      };
+      img.src = sc.icon;
+      a.appendChild(img);
+    } else {
+      showAuto();
+    }
     box.appendChild(a);
   });
   if(handle && wrap.firstChild !== handle) wrap.insertBefore(handle,wrap.firstChild);
@@ -2248,13 +2379,26 @@ function getPos(){
   return parseJSON(gs(K.positions),{}) || {};
 }
 function savePos(o){ ss(K.positions,JSON.stringify(o)); }
-/* remember where a widget was put, and the window it was put in, so a later
-   resize can keep its relative place instead of drifting */
+/* Remember where a widget was put by storing its distance from the nearest
+   edges, not a raw left/top. A right-hand card then keeps its right edge fixed
+   through any window resize, and the record is idempotent: applying it twice
+   can never nudge the card, which is what used to make widgets drift. */
 function saveWidgetPos(id, x, y){
   var p = getPos();
+  var el = $(id);
+  var w = el ? el.offsetWidth : 0;
+  var h = el ? el.offsetHeight : 0;
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var maxX = Math.max(0, vw - w), maxY = Math.max(0, vh - h);
+  x = Math.round(Math.max(0, Math.min(maxX, x)));
+  y = Math.round(Math.max(0, Math.min(maxY, y)));
+  var ax = (x + w / 2) > vw / 2 ? 'r' : 'l';
+  var ay = (y + h / 2) > vh / 2 ? 'b' : 't';
   p[id] = {
-    x: Math.round(x), y: Math.round(y),
-    vw: window.innerWidth, vh: window.innerHeight
+    x: x, y: y, w: w, h: h, vw: vw, vh: vh,
+    ax: ax, ay: ay,
+    dx: ax === 'r' ? (vw - x - w) : x,
+    dy: ay === 'b' ? (vh - y - h) : y
   };
   savePos(p);
 }
@@ -2327,22 +2471,24 @@ function applyPositions(){
     var p = pos[id];
     if(!el || !p) return;
     var w = el.offsetWidth, h = el.offsetHeight;
-    /* Positions are stored together with the window they were saved in. If
-       the window has changed, keep the widget's relative place instead of
-       pinning it to a raw pixel that only made sense at the old size. That is
-       what used to look like "drift" after a resize or a zoom change.
-       Older entries without vw/vh still behave exactly as before. */
     var maxX = Math.max(0, W - w), maxY = Math.max(0, H - h);
-    var x = p.x, y = p.y;
-    if(p.vw > 0 && p.vh > 0 && (p.vw !== W || p.vh !== H)){
-      var oldMaxX = Math.max(0, p.vw - w), oldMaxY = Math.max(0, p.vh - h);
-      var rx = oldMaxX > 0 ? p.x / oldMaxX : 0;
-      var ry = oldMaxY > 0 ? p.y / oldMaxY : 0;
-      rx = Math.max(0, Math.min(1, rx));
-      ry = Math.max(0, Math.min(1, ry));
-      x = rx * maxX;
-      y = ry * maxY;
+    var ax = p.ax, ay = p.ay, dx = p.dx, dy = p.dy;
+    /* entries saved by an older build only carry x/y plus the window they were
+       saved in: derive the anchor once so those cards stop drifting too */
+    if(ax !== 'r' && ax !== 'l'){
+      var oldVw = p.vw > 0 ? p.vw : W;
+      ax = (p.x + w / 2) > oldVw / 2 ? 'r' : 'l';
     }
+    if(ay !== 'b' && ay !== 't'){
+      var oldVh = p.vh > 0 ? p.vh : H;
+      ay = (p.y + h / 2) > oldVh / 2 ? 'b' : 't';
+    }
+    if(typeof dx !== 'number' || !isFinite(dx)) dx = ax === 'r' ? ((p.vw || W) - p.x - w) : p.x;
+    if(typeof dy !== 'number' || !isFinite(dy)) dy = ay === 'b' ? ((p.vh || H) - p.y - h) : p.y;
+    /* the distance to the anchored edge is fixed; only the box hanging off it
+       can change size (auto width), so its outer edge never moves */
+    var x = ax === 'r' ? (W - dx - w) : dx;
+    var y = ay === 'b' ? (H - dy - h) : dy;
     x = Math.round(Math.max(0, Math.min(maxX, x)));
     y = Math.round(Math.max(0, Math.min(maxY, y)));
     el.style.left = x + 'px';
@@ -2370,7 +2516,7 @@ var DEFAULT_SIZE = {
   'greeting-wrap': { w:300, h:50 },
   searchbar:       { w:500, h:42 },
   weather:         { w:152, h:90 },
-  quote:           { w:300, h:96 },
+  quote:           { w:320, h:110 },
   stocks:          { w:200, h:132 }
 };
 /* nothing may be measured smaller than this — the content would clip */
@@ -2467,7 +2613,8 @@ function applySizeScale(id,live){
   /* a quote never has a fixed height, so its width is the only honest cue */
   var auto = s && (s.auto === 1 || s.auto === true);
   var scale = (auto || !(s && s.h > 0)) ? (aw / bw) : Math.min(aw / bw, ah / bh);
-  scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, scale));
+  var smax = (id === 'quote') ? 3.6 : SCALE_MAX;
+  scale = Math.max(SCALE_MIN, Math.min(smax, scale));
   el.style.setProperty('--ws', String(Math.round(scale * 1000) / 1000));
   /* The markets grid has fixed-width value columns. `zoom` shrinks its local
      layout width as it grows, which collapsed the 1fr symbol column. Giving the
@@ -2484,12 +2631,38 @@ function syncInnerSize(el){
 
 function applySizes(){
   var sizes = parseJSON(gs(K.sizes),{}) || {};
+  /* Stop the quote card from being widened again.
+     · the width slider sets fixed:1, so a UI-scale refit must leave it alone;
+     · a profile with a pre-slider width (the old stretched strip) is reset
+       once to the CSS default, which is the boxy 320 × 150 rectangle. */
+  if(gs(K.quoteWidthInit) !== '3'){
+    if(sizes.quote && !sizes.quote.fixed){
+      delete sizes.quote;
+      ss(K.sizes, JSON.stringify(sizes));
+    }
+    ss(K.quoteWidthInit, '3');
+  } else if(sizes.quote && sizes.quote.w > 1200){
+    sizes.quote.w = 1200;
+    ss(K.sizes, JSON.stringify(sizes));
+  }
   RESIZABLE.forEach(function(id){
     var el = $(id), s = sizes[id];
     if(!el) return;
+    var auto = s && (s.auto === 1 || s.auto === true);
+    /* The shortcuts card hugs its tiles. Any saved width for it is a leftover
+       from the old measuring pass and makes the card creep wider over time, so
+       only an explicit hand-resize (auto:0) is honoured; otherwise the browser
+       sizes it from the icons. */
+    if(id === 'shortcuts' && !(s && (s.auto === 0 || s.auto === false))){
+      el.style.width = '';
+      el.style.height = '';
+      el.style.removeProperty('--ws');
+      el.style.removeProperty('--wbw');
+      syncInnerSize(el);
+      return;
+    }
     if(!s){ el.style.removeProperty('--ws'); el.style.removeProperty('--wbw'); return; }
     var w = Math.max(MIN_W[id] || 120, Math.min(window.innerWidth,  s.w));
-    var auto = s.auto === 1 || s.auto === true;
     el.style.width = w + 'px';
     if(!auto && typeof s.h === 'number' && s.h > 0){
       var h = Math.max(MIN_H[id] || 60, Math.min(window.innerHeight, s.h));
@@ -2511,6 +2684,11 @@ function refitAutoSizes(){
   var any = false;
   measureBases();
   RESIZABLE.forEach(function(id){
+    /* the quote card has its own width control; a UI-scale refit used to
+       multiply that width and turn the box into a long strip. The shortcuts
+       card hugs its tiles and owns no measured width at all, so refitting it
+       only stored a stale number that made it creep wider. */
+    if(id === 'quote' || id === 'shortcuts') return;
     var st = sizes[id];
     /* a widget the user resized by hand keeps its size */
     if(st && !(st.auto === 1 || st.auto === true)) return;
@@ -2519,7 +2697,11 @@ function refitAutoSizes(){
     var pad = _padSize[id]  || { x:0, y:0 };
     var w = Math.round(b.w * s + pad.x * (1 - s));
     if(id === 'weather') w = Math.min(w, 340);   /* a very long city shouldn't stretch the card */
-    st.w = Math.max(MIN_W[id] || 120, Math.min(window.innerWidth, w));
+    /* store the width as measured, never the width clamped to this window:
+       shrinking used to write the smaller number back, so the card could
+       never grow again when the window did */
+    w = Math.max(MIN_W[id] || 120, w);
+    st.w = w;
     delete st.h;
     any = true;
   });
@@ -2555,6 +2737,15 @@ function resetWidget(id){
   if(id === 'searchbar'){
     var w = el.querySelector('.search-wrap');
     if(w){ w.style.width = ''; w.style.height = ''; }
+  }
+  if(id === 'quote'){
+    var qcw = $('iquote-card'), qcwv = $('iquote-card-v');
+    if(qcw){
+      var qdw = Math.max(180, Math.min(1200, el.offsetWidth || 320));
+      qcw.value = qdw;
+      if(qcwv) qcwv.textContent = qdw + 'px';
+    }
+    syncQuoteCardUI();
   }
 }
 
@@ -2605,6 +2796,9 @@ function addResizeKnob(el){
     var sizes = parseJSON(gs(K.sizes),{}) || {};
     sizes[id] = { w:el.offsetWidth, h:el.offsetHeight, auto:0 };
     ss(K.sizes,JSON.stringify(sizes));
+    /* a new size moves the card's outer edge; re-record the anchor so a later
+       window resize keeps the edge the user just set */
+    saveWidgetPos(id, el.offsetLeft, el.offsetTop);
     scheduleLens();
     document.removeEventListener('mousemove',onMove);
     document.removeEventListener('mouseup',onEnd);
@@ -2799,15 +2993,35 @@ function setWeatherBusy(on){
   var btn = $('ww-refresh');
   if(btn){
     btn.disabled = !!on;
-    btn.textContent = on ? 'Updating\u2026' : 'Update now';
+    if(on) btn.classList.add('spinning');
+    else btn.classList.remove('spinning');
+    btn.title = on ? 'Fetching weather' : 'Refresh weather now';
+    btn.setAttribute('aria-label', on ? 'Fetching weather' : 'Refresh weather now');
+  }
+  /* the card says it is fetching too, so the refresh never looks ignored */
+  var upd = $('w-updated');
+  if(upd){
+    if(on){
+      if(!upd.classList.contains('is-fetching')) upd.__rest = upd.textContent;
+      upd.textContent = 'Fetching';
+      upd.classList.add('is-fetching');
+    } else {
+      upd.classList.remove('is-fetching');
+      if(upd.textContent === 'Fetching'){
+        if(_weatherStamp) upd.textContent = 'Last updated ' + weatherTimeString(_weatherStamp);
+        else upd.textContent = upd.__rest || '';
+      }
+    }
   }
   var st = $('ww-status');
   if(!st) return;
   if(on){
     if(_wstatusTimer){ clearTimeout(_wstatusTimer); _wstatusTimer = null; }
-    st.textContent = 'Updating\u2026';
-  } else if(st.textContent === 'Updating\u2026'){
-    st.textContent = '';
+    st.textContent = 'Fetching';
+    st.classList.add('is-fetching');
+  } else {
+    st.classList.remove('is-fetching');
+    if(st.textContent === 'Fetching') st.textContent = '';
   }
 }
 function weatherJustUpdated(){
@@ -2852,10 +3066,10 @@ function renderRainNote(){
   if(_rainHM){
     /* the hour and its meridian come from one city-local string, so they
        can never disagree — this is what fixes the AM/PM drift */
-    el.textContent = 'Expect rain around ' + prayerClock(_rainHM);
+    el.textContent = 'Expect rain at ' + prayerClock(_rainHM);
   }
   else if(_rainAt){
-    el.textContent = 'Expect rain around ' + weatherTimeString(_rainAt);
+    el.textContent = 'Expect rain at ' + weatherTimeString(_rainAt);
   }
   /* the card's own rain line already says "no rain" when there is none, so
      only add a little texture when the chance is there but very low */
@@ -2983,6 +3197,10 @@ function setWeatherCity(city, btn){
   ss(K.weatherCity, city);
   ss(K.weatherGeo, '');
   ss(K.weatherCache, '');
+  /* a "Follow city" watchlist loses its city for a moment; show native until
+     the new geo arrives */
+  syncAutoCurrency();
+  syncFxCity();
   loadWeather(true);
   startWeatherTimer();
   if(prev !== city){
@@ -3470,6 +3688,8 @@ function loadWeather(force){
 
   geoP.then(function(g){
     ss(K.weatherGeo,JSON.stringify(g));
+    syncAutoCurrency();
+    syncFxCity();
     /* Indonesia first: BMKG by adm4, then the same Open-Meteo path as before.
        Every BMKG failure resolves to null, so this can never break the card. */
     var viaBmkg = (String(g.cc || '').toUpperCase() === 'ID')
@@ -3616,6 +3836,7 @@ var CRYPTO_DEFAULT = ['BTC-USD','ETH-USD','SOL-USD','XRP-USD'];
    from open.er-api.com (keyless, CORS `*`, so no host permission is needed). */
 var STOCK_CURRENCIES = [
   ['native','Native (each symbol)'],
+  ['auto','Follow city'],
   ['IDR','IDR · Rupiah'],
   ['USD','USD · US Dollar'],
   ['EUR','EUR · Euro'],
@@ -3635,12 +3856,39 @@ var STOCK_CURRENCIES = [
 ];
 var FX_TTL = 6 * 60 * 60 * 1000;
 var _fxRates = null, _fxReq = null;
+/* "Follow city" resolves the weather city's country to a display currency.
+   Countries without an entry simply keep native prices rather than guessing. */
+var COUNTRY_CURRENCY = {
+  ID:'IDR', MY:'MYR', SG:'SGD', TH:'THB', PH:'PHP', VN:'VND', IN:'INR', PK:'PKR',
+  BD:'BDT', LK:'LKR', NP:'NPR', CN:'CNY', JP:'JPY', KR:'KRW', HK:'HKD', TW:'TWD',
+  MO:'MOP', AU:'AUD', NZ:'NZD', US:'USD', CA:'CAD', MX:'MXN', BR:'BRL', AR:'ARS',
+  CL:'CLP', CO:'COP', PE:'PEN', ZA:'ZAR', NG:'NGN', KE:'KES', EG:'EGP', MA:'MAD',
+  TR:'TRY', SA:'SAR', AE:'AED', QA:'QAR', KW:'KWD', IL:'ILS', RU:'RUB', UA:'UAH',
+  PL:'PLN', CZ:'CZK', HU:'HUF', RO:'RON', BG:'BGN', SE:'SEK', NO:'NOK', DK:'DKK',
+  IS:'ISK', GB:'GBP', CH:'CHF',
+  DE:'EUR', FR:'EUR', IT:'EUR', ES:'EUR', NL:'EUR', BE:'EUR', AT:'EUR', IE:'EUR',
+  PT:'EUR', FI:'EUR', GR:'EUR', SK:'EUR', SI:'EUR', LV:'EUR', LT:'EUR', EE:'EUR',
+  LU:'EUR', MT:'EUR', CY:'EUR', HR:'EUR'
+};
+function currencyForGeo(geo){
+  var cc = geo && geo.cc ? String(geo.cc).toUpperCase() : '';
+  var cur = cc && COUNTRY_CURRENCY[cc];
+  return cur || 'native';
+}
 function stocksCurrency(){
-  var c = String(gs(K.stocksCurrency) || 'native').toUpperCase();
+  /* fresh profiles follow the weather city by default: the prices then match
+     the currency of the place the user actually lives in */
+  var c = String(gs(K.stocksCurrency) || 'auto').toLowerCase();
   for(var i = 0; i < STOCK_CURRENCIES.length; i++){
-    if(STOCK_CURRENCIES[i][0] === c) return STOCK_CURRENCIES[i][0];
+    if(STOCK_CURRENCIES[i][0].toLowerCase() === c) return STOCK_CURRENCIES[i][0];
   }
   return 'native';
+}
+/* the mode the user chose, resolved to the currency actually on screen */
+function stocksCurrencyTarget(){
+  var mode = stocksCurrency();
+  if(mode !== 'auto') return mode;
+  return currencyForGeo(parseJSON(gs(K.weatherGeo), null));
 }
 function fxCache(){
   if(_fxRates) return _fxRates;
@@ -3661,7 +3909,7 @@ function fxRate(from, to){
   return b / a;
 }
 function ensureFxRates(){
-  if(stocksCurrency() === 'native') return null;
+  if(stocksCurrencyTarget() === 'native') return null;
   var c = fxCache();
   if(c && c.rates && (Date.now() - c.ts) < FX_TTL) return Promise.resolve(c);
   if(_fxReq) return _fxReq;
@@ -3686,7 +3934,7 @@ function ensureFxRates(){
 function stockPriceText(r){
   var price = (r && r.price != null) ? Number(r.price) : NaN;
   if(!isFinite(price)) return '\u2014';
-  var target = stocksCurrency();
+  var target = stocksCurrencyTarget();
   if(target !== 'native'){
     var rate = fxRate(r && r.cur, target);
     if(rate != null) return fmtStockPrice(price * rate);
@@ -3695,10 +3943,218 @@ function stockPriceText(r){
 }
 /* the small currency tag after the number; blank when nothing was converted */
 function stockCurrencyTag(r){
-  var target = stocksCurrency();
+  var target = stocksCurrencyTarget();
   if(target === 'native') return '';
   var rate = fxRate(r && r.cur, target);
   return rate != null ? target : '';
+}
+
+/* ── pair converter ────────────────────────────────────────
+   A small, separate USD→city conversion shown in the Markets footer and
+   window. Yahoo's chart endpoint carries intraday FX pairs, so this moves on
+   the same cadence as the watchlist. When it is unreachable, open.er-api.com
+   answers with its daily rate instead of leaving the line blank. */
+var FX_CODES = (function(){
+  var out = [], seen = {};
+  function push(code, label){
+    if(!code || seen[code]) return;
+    seen[code] = 1;
+    out.push([code, label]);
+  }
+  STOCK_CURRENCIES.forEach(function(c){
+    if(c[0] === 'native' || c[0] === 'auto') return;
+    push(c[0], c[1]);
+  });
+  /* the watchlist list is deliberately short; a city can still name a currency
+     outside it (VND, NGN, PLN…) and the converter should be able to show it */
+  Object.keys(COUNTRY_CURRENCY).forEach(function(cc){
+    push(COUNTRY_CURRENCY[cc], COUNTRY_CURRENCY[cc]);
+  });
+  return out;
+})();
+function fxCode(v){
+  v = String(v || '').toUpperCase();
+  for(var i = 0; i < FX_CODES.length; i++){
+    if(FX_CODES[i][0] === v) return v;
+  }
+  return '';
+}
+function fxBaseCode(){
+  return fxCode(gs(K.fxBase)) || 'USD';
+}
+/* unset means "follow the weather city", the same rule the watchlist uses */
+function fxQuoteCode(){
+  var q = fxCode(gs(K.fxQuote));
+  if(q) return q;
+  var t = fxCode(currencyForGeo(parseJSON(gs(K.weatherGeo), null)));
+  return t || 'IDR';
+}
+/* money symbols for the quote side; anything unmapped keeps its code */
+var FX_SYMBOLS = {
+  USD:'$', EUR:'\u20ac', GBP:'\u00a3', JPY:'\u00a5', CNY:'\u00a5', KRW:'\u20a9',
+  INR:'\u20b9', IDR:'Rp', MYR:'RM', THB:'\u0e3f', PHP:'\u20b1',
+  SGD:'S$', HKD:'HK$', TWD:'NT$', AUD:'A$', NZD:'NZ$', CAD:'C$', CHF:'CHF ',
+  MOP:'MOP$', VND:'\u20ab', PKR:'\u20a8', BDT:'\u09f3', LKR:'\u20a8', NPR:'\u20a8',
+  MXN:'MX$', BRL:'R$', ARS:'AR$', CLP:'CLP$', COP:'COL$', PEN:'S/',
+  ZAR:'R', NGN:'\u20a6', KES:'KSh ', EGP:'E\u00a3', MAD:'DH ',
+  TRY:'\u20ba', SAR:'\uFDFC', AED:'\u062f.\u0625 ', QAR:'\u0631.\u0642 ',
+  KWD:'\u062f.\u0643 ', ILS:'\u20aa', RUB:'\u20bd', UAH:'\u20b4',
+  PLN:'z\u0142 ', CZK:'K\u010d ', HUF:'Ft ', RON:'lei ', BGN:'\u043b\u0432 ',
+  SEK:'kr ', NOK:'kr ', DKK:'kr ', ISK:'kr '
+};
+function fxMoney(code, rate){
+  var sym = FX_SYMBOLS[code] || '';
+  return (sym || '') + fxFmtRate(rate) + (sym ? '' : ' ' + code);
+}
+var _fxPair = null, _fxPairReq = null, _fxPairKey = '';
+function fxPairCache(){
+  if(_fxPair) return _fxPair;
+  var c = parseJSON(gs(K.fxConvCache), null);
+  if(c && Number(c.rate) > 0) _fxPair = c;
+  return _fxPair;
+}
+function fxPairFresh(c, base, quote){
+  return !!(c && c.base === base && c.quote === quote && Number(c.rate) > 0 &&
+    (Date.now() - Number(c.ts || 0)) < stocksEveryMin() * 60000);
+}
+function fxFmtRate(v){
+  if(!(Number(v) > 0)) return '\u2014';
+  var n = Number(v);
+  var d = n >= 1000 ? 0 : (n >= 100 ? 2 : (n >= 1 ? 4 : 6));
+  try{
+    return n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  }catch(e){
+    return n.toFixed(d);
+  }
+}
+function fxUpdatedText(ts){
+  var clock = ts ? stocksUpdatedClock(ts) : '';
+  return clock ? 'Updated ' + clock : '';
+}
+function fetchYahooFx(base, quote){
+  var sym = base + quote + '=X';
+  var u = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+          encodeURIComponent(sym) + '?range=1d&interval=5m';
+  return fetchJSON(u, 9000).then(function(j){
+    var r = j && j.chart && j.chart.result && j.chart.result[0];
+    if(!r || !r.meta) throw new Error('no fx');
+    var meta = r.meta;
+    var rate = Number(meta.regularMarketPrice);
+    if(!(rate > 0)){
+      var q = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {};
+      var closes = q.close || [];
+      for(var i = closes.length - 1; i >= 0; i--){
+        var v = Number(closes[i]);
+        if(v > 0){ rate = v; break; }
+      }
+    }
+    if(!(rate > 0)) throw new Error('no rate');
+    return { ts: Date.now(), rate: rate, src: 'Yahoo Finance' };
+  });
+}
+function fetchErFx(base, quote){
+  return fetchJSON('https://open.er-api.com/v6/latest/' + encodeURIComponent(base), 9000)
+    .then(function(j){
+      var rate = j && j.rates && Number(j.rates[quote]);
+      if(!(rate > 0)) throw new Error('no rate');
+      var ts = Number(j.time_last_update_unix) * 1000 || Date.now();
+      return { ts: ts, rate: rate, src: 'er-api' };
+    });
+}
+/* the pair is deliberately hidden when both sides are the same: a US city
+   should not carry a "USD → USD" line that says nothing */
+function renderFx(fetching){
+  var base = fxBaseCode(), quote = fxQuoteCode(), on = base !== quote;
+  var c = fxPairCache();
+  var pair = (c && c.base === base && c.quote === quote) ? c : null;
+  var rate = pair ? Number(pair.rate) : null;
+  var card = $('sk-fx');
+  if(card){
+    if(!on){
+      card.hidden = true;
+      card.textContent = '';
+    } else {
+      card.hidden = false;
+      card.textContent = '1 ' + base + ' = ' + (rate > 0 ? fxMoney(quote, rate) : '\u2014');
+      card.title = rate > 0
+        ? ('1 ' + base + ' = ' + fxMoney(quote, rate) +
+           (pair.ts ? ' \u00b7 ' + fxUpdatedText(pair.ts) : ''))
+        : 'Fetching the exchange rate\u2026';
+    }
+  }
+  var rateEl = $('fx-rate');
+  if(rateEl){
+    rateEl.textContent = on
+      ? '1 ' + base + ' = ' + (rate > 0 ? fxMoney(quote, rate) : '\u2014')
+      : 'Pick two different currencies';
+  }
+  var stamp = $('fx-stamp');
+  if(stamp){
+    if(!on) stamp.textContent = '';
+    else if(fetching) stamp.textContent = 'Fetching\u2026';
+    else if(pair) stamp.textContent = fxUpdatedText(pair.ts) +
+      (pair.src ? ' \u00b7 ' + pair.src : '');
+    else stamp.textContent = 'Rate not available';
+  }
+  var bs = $('fx-base'), qs = $('fx-quote');
+  if(bs && bs.value !== base){ bs.value = base; if(bs.__rich) updateRich(bs); }
+  if(qs && qs.value !== quote){ qs.value = quote; if(qs.__rich) updateRich(qs); }
+}
+function populateFxSelects(){
+  ['fx-base','fx-quote'].forEach(function(id){
+    var sel = $(id);
+    if(!sel) return;
+    sel.innerHTML = FX_CODES.map(function(c){
+      return '<option value="' + c[0] + '">' + c[1] + '</option>';
+    }).join('');
+    if(sel.__rich) updateRich(sel);
+  });
+  renderFx(false);
+}
+function loadFx(force){
+  var base = fxBaseCode(), quote = fxQuoteCode();
+  if(base === quote){ renderFx(false); return Promise.resolve(null); }
+  if(!stocksOn() || !isShown('stocks')) return Promise.resolve(null);
+  var c = fxPairCache();
+  if(!force && fxPairFresh(c, base, quote)){ renderFx(false); return Promise.resolve(c); }
+  var key = base + '|' + quote;
+  /* a request for this exact pair is already running */
+  if(_fxPairReq && _fxPairKey === key) return _fxPairReq;
+  _fxPairKey = key;
+  renderFx(true);
+  var p = fetchYahooFx(base, quote).catch(function(){
+    return fetchErFx(base, quote);
+  }).then(function(out){
+    if(!out) return null;
+    if(_fxPairKey !== key) return null;   /* the user moved on to another pair */
+    _fxPairReq = null;
+    out.base = base; out.quote = quote;
+    _fxPair = out;
+    ss(K.fxConvCache, JSON.stringify(out));
+    renderFx(false);
+    return out;
+  }).catch(function(){
+    if(_fxPairKey === key) _fxPairReq = null;
+    /* keep the last known rate on screen rather than blanking it */
+    renderFx(false);
+    return null;
+  });
+  _fxPairReq = p;
+  return p;
+}
+function setFxPair(which, code){
+  code = fxCode(code);
+  if(!code) return;
+  if(which === 'base') ss(K.fxBase, code);
+  else ss(K.fxQuote, code);
+  renderFx(false);
+  loadFx(true);
+}
+/* an unset quote follows the weather city; a pinned one never moves */
+function syncFxCity(){
+  if(fxCode(gs(K.fxQuote))) return;
+  renderFx(false);
+  loadFx(false);
 }
 function stocksOn(){ return gs(K.showStocks) === '1'; }
 function stocksMarket(){
@@ -3733,6 +4189,17 @@ function validStockSymbol(sym){
 function fmtStockPrice(v){
   if(v == null || !isFinite(v)) return '\u2014';
   var a = Math.abs(v), d;
+  /* a converted crypto price can reach billions of rupiah; a compact form
+     keeps the coin name readable on the narrow home card */
+  if(a >= 1e9){
+    var big = a >= 1e12;
+    var n = Number(v) / (big ? 1e12 : 1e9);
+    var s;
+    try{
+      s = Number(n).toLocaleString(undefined, { minimumFractionDigits:0, maximumFractionDigits:2 });
+    }catch(e){ s = Number(n).toFixed(2); }
+    return s + (big ? 'T' : 'B');
+  }
   if(a >= 1000) d = 0;
   else if(a >= 1) d = 2;
   else if(a >= 0.01) d = 4;
@@ -3764,41 +4231,121 @@ function setStocksNote(msg){
   var n = $('sk-note');
   if(n) setText(n, msg || 'Live');
 }
-function stocksHasOpen(data){
-  var rows = (data && data.rows) || [];
-  for(var i = 0; i < rows.length; i++){
-    if(rows[i] && rows[i].open) return true;
-  }
-  return false;
+/* relative "how old is this data" copy, in the same units a person would use */
+function stocksFetchedText(ts){
+  if(!ts) return '';
+  var mins = Math.floor((Date.now() - ts) / 60000);
+  if(mins < 1) return 'just now';
+  if(mins < 60) return mins + (mins === 1 ? ' min ago' : ' mins ago');
+  var hrs = Math.floor(mins / 60);
+  if(hrs < 24) return hrs + (hrs === 1 ? ' hour ago' : ' hours ago');
+  var days = Math.floor(hrs / 24);
+  return days + (days === 1 ? ' day ago' : ' days ago');
 }
-/* the source label tells the truth: crypto trades non-stop, stocks only while
-   their exchange session is open, and a failed refresh keeps the last close. */
+/* the clock in the subtitle follows the same device/city choice AND the same
+   12/24-hour choice as the clock card, so the two never disagree */
+function stocksClockText(h, m){
+  if((gs(K.hourFmt) || '12') === '12'){
+    var hh = h % 12 || 12;
+    return pad2n(hh) + ':' + pad2n(m) + (h < 12 ? ' AM' : ' PM');
+  }
+  return pad2n(h) + ':' + pad2n(m);
+}
+function stocksUpdatedClock(ts){
+  if(!ts) return '';
+  if(followCityTime()){
+    var dc = new Date(ts + _tzOffsetSec * 1000);
+    return stocksClockText(dc.getUTCHours(), dc.getUTCMinutes());
+  }
+  var d = new Date(ts);
+  return stocksClockText(d.getHours(), d.getMinutes());
+}
+function stocksAgoClock(ts){
+  var ago = stocksFetchedText(ts);
+  var clock = stocksUpdatedClock(ts);
+  if(ago && clock) return ago + ' at ' + clock;
+  return ago || (clock ? 'at ' + clock : '');
+}
+/* rebuild the rows when the hour format changes: their timestamps are baked
+   into the HTML, exactly like the timezone they were drawn with */
+function refreshStocksClock(){
+  if(!stocksOn()) return;
+  var sc = parseJSON(gs(K.stocksCache), null);
+  if(sc && sc.rows){ renderStocks(sc); renderStocksWindow(sc); }
+  /* the converter stamp is baked into the page the same way */
+  renderFx(false);
+}
+/* the source label tells the truth per symbol: crypto trades non-stop, stocks
+   only while their own exchange session is open, and a failed refresh keeps
+   the last close. A mixed watchlist reports how many are actually open. */
 function applyStocksLabels(data){
   var crypto = stocksMarket() === 'crypto';
   var note, sub;
+  var c = stocksSessionCounts(data);
+  var ts = data && data.ts;
+  var age = stocksAgoClock(ts);
+  var clock = stocksUpdatedClock(ts);
   if(data && data.rateLimited){
-    note = 'Busy'; sub = 'Yahoo is rate-limiting \u00b7 showing the last close';
+    note = 'Busy';
+    sub = 'Rate limited' + (stocksFetchedText(ts) ? ' \u00b7 fetched ' + stocksFetchedText(ts) : '');
   } else if(data && data.offline){
-    note = 'Offline'; sub = 'Offline \u00b7 showing the last close';
+    note = 'Offline';
+    sub = 'Offline' + (stocksFetchedText(ts) ? ' \u00b7 fetched ' + stocksFetchedText(ts) : '');
   } else if(data && data.rows && data.rows.length && stocksPricedRows(data) === 0){
-    note = 'Updating\u2026'; sub = 'Yahoo Finance';
+    note = 'Updating\u2026'; sub = 'Fetching prices\u2026';
   } else if(crypto){
-    note = 'Live'; sub = 'Live \u00b7 Yahoo Finance';
-  } else if(stocksHasOpen(data)){
-    note = 'Delayed'; sub = 'Delayed \u00b7 Yahoo Finance';
+    note = 'Live';
+    sub = 'Live' + (clock ? ' \u00b7 updated ' + clock : '');
+  } else if(c.total && c.open === 0){
+    note = 'Closed';
+    sub = age ? 'Fetched ' + age : 'Last close';
+  } else if(c.total && c.open === c.total){
+    note = 'Delayed';
+    sub = 'Up to date' + (clock ? ' at ' + clock : '');
+  } else if(c.total){
+    note = c.open + '/' + c.total + ' open';
+    sub = age ? 'Fetched ' + age : 'Mixed sessions';
   } else {
-    note = 'Closed'; sub = 'Last close \u00b7 Yahoo Finance';
+    note = 'Closed';
+    sub = age ? 'Fetched ' + age : 'Last close';
   }
   var n = $('sk-note');
   if(n) setText(n, note);
   var ws = $('stockswin-sub');
-  if(ws) setText(ws, sub);
+  if(ws && !_stocksFetching){
+    ws.classList.remove('is-fetching');
+    setText(ws, sub);
+  }
   var wsrc = $('stockswin-src');
-  var src = stocksCurrency() === 'native' ? 'Source: Yahoo Finance'
-    : 'Source: Yahoo Finance \u00b7 ' + stocksCurrency() + ' via er-api';
-  if(wsrc) setText(wsrc, src);
-  var cardSrc = $('sk-src');
+  var tgt = stocksCurrencyTarget();
+  var src = 'Source: <a href="https://finance.yahoo.com/" target="_blank" rel="noopener noreferrer">Yahoo Finance</a>' +
+    (tgt === 'native' ? '' : ' \u00b7 ' + tgt + ' via er-api');
+  if(wsrc) wsrc.innerHTML = src;
+  var cardSrc = $('sk-src-txt');
   if(cardSrc) setText(cardSrc, 'Source: Yahoo Finance');
+  _skSessionSig = stocksSessionSig(data);
+}
+/* while a request is running the subtitle becomes a live "Fetching..." instead
+   of an age that is about to be replaced */
+var _stocksFetching = false;
+function setStocksFetching(on){
+  _stocksFetching = !!on;
+  var ws = $('stockswin-sub');
+  if(!ws) return;
+  if(on){
+    ws.classList.add('is-fetching');
+    setText(ws, 'Fetching');
+  } else {
+    ws.classList.remove('is-fetching');
+  }
+}
+var _skSwap = { card:false, win:false };
+function playSkSwap(el, key){
+  if(!el || !_skSwap[key]) return;
+  _skSwap[key] = false;
+  el.classList.remove('sk-swap');
+  void el.offsetWidth;   /* restart the keyframes even if the class was there */
+  el.classList.add('sk-swap');
 }
 function renderStocks(data){
   var host = $('sk-list');
@@ -3806,6 +4353,7 @@ function renderStocks(data){
   var rows = (data && data.rows) || [];
   if(!rows.length){
     host.innerHTML = '<div class="sk-empty">Add a few symbols in Settings.</div>';
+    playSkSwap(host, 'card');
     applyStocksLabels(data);
     applySizeScale('stocks');
     return;
@@ -3814,9 +4362,12 @@ function renderStocks(data){
   rows.forEach(function(r){
     var has = r.price != null && isFinite(r.price);
     var up = Number(r.pct || 0) >= 0;
+    var live = stockRowOpen(r);
+    var why = stocksMarket() === 'crypto' ? '' : stockClosedReason(r);
     var pct = has ? ((up ? '+' : '') + Number(r.pct || 0).toFixed(2) + '%') : '\u2014';
     html += '<div class="sk-row' + (r.stale ? ' stale' : '') + '"' + (r.stale ? ' title="Last known price"' : '') + '>' +
-      '<span class="sk-sym" title="' + holEsc(r.name || r.symbol) + '">' + holEsc(stockLabel(r.symbol)) + '</span>' +
+      '<span class="sk-sym" title="' + holEsc((r.name || r.symbol) + ' \u00b7 ' + (live ? 'open' : (why ? 'closed (' + why + ')' : 'closed'))) + '">' +
+        '<span class="sk-dot' + (live ? '' : ' off') + '"></span>' + holEsc(stockLabel(r.symbol)) + '</span>' +
       '<span class="sk-px">' + holEsc(stockPriceText(r)) + (stockCurrencyTag(r) ? '<span class="sk-cur">' + stockCurrencyTag(r) + '</span>' : '') + '</span>' +
       '<span class="sk-spark-slot">' + stockSpark(r.spark || []) + '</span>' +
       '<span class="sk-chg ' + (has ? (up ? 'up' : 'down') : 'flat') + '">' +
@@ -3824,6 +4375,7 @@ function renderStocks(data){
     '</div>';
   });
   host.innerHTML = html;
+  playSkSwap(host, 'card');
   applyStocksLabels(data);
   /* fixed base => --wbw never follows the latest price width, so symbols stay
      visible and the numbers scale with the card instead of overlapping */
@@ -3846,6 +4398,9 @@ function stocksPricedRows(data){
   }
   return n;
 }
+/* Each symbol carries its own exchange session. Yahoo hands us the regular
+   period for the current day in epoch seconds, so a mixed watchlist (AAPL +
+   BBCA.JK) can be read one row at a time instead of collapsing into one word. */
 function stockSessionOpen(meta){
   var reg = meta && meta.currentTradingPeriod && meta.currentTradingPeriod.regular;
   if(!reg || !reg.start || !reg.end) return null;
@@ -3853,12 +4408,73 @@ function stockSessionOpen(meta){
   if(now < reg.start) return false;
   return now <= reg.end;
 }
+function stockRowOpen(r){
+  if(!r) return false;
+  if(stocksMarket() === 'crypto') return true;
+  if(r.sessStart && r.sessEnd){
+    var now = Math.floor(Date.now() / 1000);
+    return now >= r.sessStart && now <= r.sessEnd;
+  }
+  return !!r.open;
+}
+/* the exchange's own calendar day, using the offset Yahoo reported with the
+   quote; device timezone must never decide whether Jakarta is on Sunday */
+function stockLocalDay(ts, r){
+  if(!ts) return '';
+  var off = (r && r.off != null && isFinite(Number(r.off))) ? Number(r.off) : null;
+  if(off == null) return '';
+  var d = new Date(Number(ts) * 1000 + off * 1000);
+  return d.getUTCFullYear() + '-' + pad2n(d.getUTCMonth() + 1) + '-' + pad2n(d.getUTCDate());
+}
+function stockLocalDow(r){
+  var off = (r && r.off != null && isFinite(Number(r.off))) ? Number(r.off) : null;
+  if(off == null) return -1;
+  return new Date(Date.now() + off * 1000).getUTCDay();
+}
+/* Yahoo's current period is the last real session (or the upcoming one before
+   an open). If its local date is not today, this exchange simply has no session
+   today: a weekend, or a public holiday. */
+function stockClosedReason(r){
+  if(!r || stockRowOpen(r)) return '';
+  var today = stockLocalDay(Math.floor(Date.now() / 1000), r);
+  var sess = stockLocalDay(r.sessStart, r);
+  if(!today || !sess || sess === today) return '';
+  var dow = stockLocalDow(r);
+  return (dow === 0 || dow === 6) ? 'weekend' : 'holiday';
+}
+function stocksSessionCounts(data){
+  var rows = (data && data.rows) || [];
+  var open = 0, total = 0;
+  for(var i = 0; i < rows.length; i++){
+    if(!rows[i]) continue;
+    total++;
+    if(stockRowOpen(rows[i])) open++;
+  }
+  return { open: open, total: total };
+}
+/* a tiny signature so the minute ticker only repaints when a session actually
+   flips (IDX close, NYSE open) instead of every minute for nothing */
+var _skSessionSig = '';
+function stocksSessionSig(data){
+  var rows = (data && data.rows) || [], out = '';
+  for(var i = 0; i < rows.length; i++) out += stockRowOpen(rows[i]) ? '1' : '0';
+  return out;
+}
 function loadStocks(force){
   if(!stocksOn() || !isShown('stocks')) return null;
   var list = stocksList();
   var cache = parseJSON(gs(K.stocksCache), null);
   var same = !!(cache && cache.market === stocksMarket() && cache.symbols === list.join(','));
-  var fresh = !!(same && cache.ts && !cache.offline && stocksPricedRows(cache) > 0 &&
+  /* a cache written before lastTrade existed cannot date a closed row; refresh
+     it once instead of showing a bare "Closed" until the next interval */
+  var needsMeta = false;
+  if(same && stocksMarket() !== 'crypto' && cache.rows){
+    for(var mi = 0; mi < cache.rows.length; mi++){
+      var mr = cache.rows[mi];
+      if(mr && mr.price != null && isFinite(mr.price) && (mr.lastTrade == null || mr.off == null)){ needsMeta = true; break; }
+    }
+  }
+  var fresh = !!(same && !needsMeta && cache.ts && !cache.offline && stocksPricedRows(cache) > 0 &&
     (Date.now() - cache.ts) < stocksEveryMin() * 60000);
   if(fresh && !force){
     renderStocks(cache);
@@ -3874,6 +4490,7 @@ function loadStocks(force){
   }
   var req = ++_stockReq;
   setStocksNote('Updating\u2026');
+  setStocksFetching(true);
   var jobs = list.map(function(sym, idx){
     var u = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
             encodeURIComponent(sym) + '?range=1d&interval=15m';
@@ -3886,8 +4503,17 @@ function loadStocks(force){
         var meta = r.meta;
         var q = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {};
         var closes = q.close || [];
+        var times = r.timestamp || [];
+        var sess = (meta.currentTradingPeriod && meta.currentTradingPeriod.regular) || {};
         var price = Number(meta.regularMarketPrice);
         var prev = Number(meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose);
+        /* the last real close in the series doubles as the last trade time when
+           Yahoo omits regularMarketTime — needed to date a pre-market row */
+        var lastTs = 0;
+        for(var ti = closes.length - 1; ti >= 0; ti--){
+          var tv = Number(closes[ti]);
+          if(isFinite(tv) && tv !== 0){ lastTs = Number(times[ti]) || 0; break; }
+        }
         /* markets can drop regularMarketPrice between sessions; the last real
            close in the series is still a valid answer */
         if(!isFinite(price) || price === 0){
@@ -3906,16 +4532,23 @@ function loadStocks(force){
           cur: meta.currency || '',
           name: meta.shortName || meta.symbol || sym,
           open: stockSessionOpen(meta),
+          sessStart: sess.start || null,
+          sessEnd: sess.end || null,
+          lastTrade: Number(meta.regularMarketTime) || lastTs || null,
+          tz: meta.exchangeTimezoneName || meta.timezone || '',
+          off: (meta.gmtoffset != null ? Number(meta.gmtoffset) : null),
           spark: closes.slice(-26)
         };
       }).catch(function(e){
-        return { symbol: sym, price: null, pct: 0, cur: '', name: sym, open: null, spark: [], failed: true,
+        return { symbol: sym, price: null, pct: 0, cur: '', name: sym, open: null,
+                 sessStart: null, sessEnd: null, lastTrade: null, tz: '', off: null, spark: [], failed: true,
                  err: String((e && e.message) || '') };
       });
     });
   });
   return Promise.all(jobs).then(function(rows){
     if(req !== _stockReq) return;
+    setStocksFetching(false);
     var oldBy = {};
     if(same && cache.rows){
       cache.rows.forEach(function(r){ if(r && r.symbol) oldBy[r.symbol] = r; });
@@ -3925,7 +4558,8 @@ function loadStocks(force){
       var old = oldBy[r.symbol];
       if(old && old.price != null && isFinite(old.price)){
         r.price = old.price; r.pct = old.pct; r.cur = old.cur; r.name = old.name;
-        r.open = old.open; r.spark = old.spark || []; r.stale = true;
+        r.open = old.open; r.sessStart = old.sessStart; r.sessEnd = old.sessEnd;
+        r.lastTrade = old.lastTrade; r.tz = old.tz; r.off = old.off; r.spark = old.spark || []; r.stale = true;
         delete r.failed;
       }
       return r;
@@ -3962,8 +4596,26 @@ function startStocksTimer(){
   _stocksTimer = setInterval(function(){
     if(document.hidden) return;
     loadStocks(true);
+    /* the converter rides the same cadence as the watchlist */
+    loadFx(false);
   }, stocksEveryMin() * 60000);
 }
+/* prices refresh on the user's schedule, but sessions flip on the clock. The
+   cached periods are enough to redraw the row states without a request. */
+function refreshStocksSession(){
+  if(!stocksOn() || !isShown('stocks')) return;
+  var c = parseJSON(gs(K.stocksCache), null);
+  if(!c || !c.rows || !c.rows.length) return;
+  if(stocksSessionSig(c) !== _skSessionSig){
+    renderStocks(c);
+    renderStocksWindow(c);
+  } else {
+    /* the age line ("15 mins ago") has to keep ageing even when no session
+       flips and no request runs */
+    applyStocksLabels(c);
+  }
+}
+setInterval(refreshStocksSession, 60000);
 /* rows for the window: fall back to the saved symbol list before data lands */
 function stocksRowsFor(data){
   var rows = (data && data.rows) || [];
@@ -3978,17 +4630,40 @@ function renderStocksWindow(data){
   var rows = stocksRowsFor(data);
   if(!rows.length){
     host.innerHTML = '<div class="sk-win-empty">No symbols yet \u2014 add one below.</div>';
+    playSkSwap(host, 'win');
     return;
   }
   var html = '';
-  rows.forEach(function(r){
+  rows.forEach(function(r, idx){
     var has = r.price != null && isFinite(r.price);
     var up = Number(r.pct || 0) >= 0;
+    var live = stockRowOpen(r);
+    var why = stocksMarket() === 'crypto' ? '' : stockClosedReason(r);
+    var state = stocksMarket() === 'crypto' ? 'Live' : (live ? 'Open' : 'Closed');
+    /* every closed row names when it last traded, in the clock the user chose.
+       After the close that is the session end; before the open (pre-market) the
+       current period's end is still in the future, so fall back to Yahoo's last
+       regular trade time — the previous session's close. A day with no session
+       at all is named plainly instead. */
+    if(why){
+      state = 'Closed (' + why + ')';
+    } else if(!live && stocksMarket() !== 'crypto'){
+      var nowSec = Math.floor(Date.now() / 1000);
+      var closeSec = 0;
+      if(r.sessEnd && nowSec > r.sessEnd) closeSec = r.sessEnd;
+      else if(r.lastTrade) closeSec = r.lastTrade;
+      if(closeSec){
+        var closedAt = stocksUpdatedClock(closeSec * 1000);
+        if(closedAt) state = 'Closed ' + closedAt;
+      }
+    }
     var pct = has ? ((up ? '+' : '') + Number(r.pct || 0).toFixed(2) + '%') : '\u2014';
+    var sym = holEsc(r.symbol);
     html += '<div class="sk-win-row' + (r.stale ? ' stale' : '') + '">' +
       '<div class="sk-win-id">' +
         '<span class="sk-win-sym">' + holEsc(stockLabel(r.symbol)) + '</span>' +
         '<span class="sk-win-name">' + holEsc(r.name || r.symbol) + '</span>' +
+        '<span class="sk-win-state' + (live ? '' : ' off') + '">' + state + '</span>' +
       '</div>' +
       '<div class="sk-win-num">' +
         '<span class="sk-win-px">' + holEsc(stockPriceText(r)) + (stockCurrencyTag(r) ? '<span class="sk-cur">' + stockCurrencyTag(r) + '</span>' : '') + '</span>' +
@@ -3996,10 +4671,15 @@ function renderStocksWindow(data){
           (has ? (up ? '\u25B2' : '\u25BC') + ' ' : '') + pct + '</span>' +
       '</div>' +
       '<span class="sk-spark-slot">' + stockSpark(r.spark || []) + '</span>' +
-      '<button class="sk-remove" type="button" data-sym="' + holEsc(r.symbol) + '" title="Remove" aria-label="Remove ' + holEsc(r.symbol) + '">\u2715</button>' +
+      '<div class="sk-win-move">' +
+        '<button class="sk-move-btn" type="button" data-sym="' + sym + '" data-dir="up" title="Move up" aria-label="Move ' + sym + ' up"' + (idx === 0 ? ' disabled' : '') + '>\u25B2</button>' +
+        '<button class="sk-move-btn" type="button" data-sym="' + sym + '" data-dir="down" title="Move down" aria-label="Move ' + sym + ' down"' + (idx === rows.length - 1 ? ' disabled' : '') + '>\u25BC</button>' +
+      '</div>' +
+      '<button class="sk-remove" type="button" data-sym="' + sym + '" title="Remove" aria-label="Remove ' + sym + '">\u2715</button>' +
     '</div>';
   });
   host.innerHTML = html;
+  playSkSwap(host, 'win');
   applyStocksLabels(data);
 }
 function syncStocksUI(){
@@ -4031,42 +4711,62 @@ function syncStocksUI(){
   var selA = $('istockscurrency'), selB = $('stockswin-currency');
   if(selA && selA.value !== cur) selA.value = cur;
   if(selB && selB.value !== cur) selB.value = cur;
-  if(cur !== 'native') ensureFxRates();
+  if(stocksCurrencyTarget() !== 'native') ensureFxRates();
   var cache = parseJSON(gs(K.stocksCache), null);
-  var upd = $('stockswin-updated');
-  if(upd){
-    if(cache && cache.ts && cache.market === stocksMarket()){
-      var dt = new Date(cache.ts);
-      upd.textContent = pad2n(dt.getHours()) + ':' + pad2n(dt.getMinutes());
-    } else {
-      upd.textContent = '\u2014';
-    }
-  }
   applyStocksLabels(cache && cache.market === stocksMarket() ? cache : null);
 }
 function setStocksMarket(m){
   ss(K.stocksMarket, m === 'crypto' ? 'crypto' : 'stock');
   ss(K.stocksCache, '');
+  _skSwap.card = true;
+  _skSwap.win = true;
   syncStocksUI();
   loadStocks(true);
   startStocksTimer();
 }
 function setStocksCurrency(c){
   ss(K.stocksCurrency, c || 'native');
-  if(stocksCurrency() !== 'native') ensureFxRates();
+  if(stocksCurrencyTarget() !== 'native') ensureFxRates();
   var cache = parseJSON(gs(K.stocksCache), null);
   if(cache){ renderStocks(cache); renderStocksWindow(cache); }
   syncStocksUI();
+  syncAutoCurrency(true);
+}
+/* the "Follow city" label carries its resolved currency, so the reason for the
+   switch is visible instead of mysterious */
+function currencyAutoLabel(){
+  var geo = parseJSON(gs(K.weatherGeo), null);
+  var t = stocksCurrencyTarget();
+  if(t === 'native') return 'Follow city';
+  var place = geo && (geo.cityName || geo.city);
+  return 'Follow city \u2014 ' + t + (place ? ' (' + holEsc(place) + ')' : '');
 }
 function populateCurrencySelects(){
   ['istockscurrency','stockswin-currency'].forEach(function(id){
     var sel = $(id);
     if(!sel) return;
     sel.innerHTML = STOCK_CURRENCIES.map(function(c){
-      return '<option value="' + c[0] + '">' + c[1] + '</option>';
+      var label = c[0] === 'auto' ? currencyAutoLabel() : c[1];
+      return '<option value="' + c[0] + '">' + label + '</option>';
     }).join('');
     sel.value = stocksCurrency();
   });
+  _autoCurLast = stocksCurrencyTarget();
+}
+/* when the city changes, a "Follow city" watchlist switches currency with it.
+   Native stays native, and an unknown country keeps native prices. */
+var _autoCurLast = null;
+function syncAutoCurrency(force){
+  if(stocksCurrency() !== 'auto'){ _autoCurLast = null; return; }
+  var t = stocksCurrencyTarget();
+  if(!force && t === _autoCurLast) return;
+  _autoCurLast = t;
+  populateCurrencySelects();
+  if(t !== 'native') ensureFxRates();
+  syncFxCity();
+  var cache = parseJSON(gs(K.stocksCache), null);
+  if(cache && cache.rows){ renderStocks(cache); renderStocksWindow(cache); }
+  else applyStocksLabels(cache || null);
 }
 function addStockSymbol(sym){
   sym = String(sym || '').trim().toUpperCase();
@@ -4093,6 +4793,33 @@ function removeStockSymbol(sym){
   loadStocks(true);
   syncStocksUI();
 }
+/* moving a row changes the saved order and the current view together, so the
+   card and the window always list symbols in the same sequence */
+function moveStockSymbol(sym, dir){
+  sym = String(sym || '').toUpperCase();
+  var list = stocksList();
+  var i = list.indexOf(sym);
+  if(i < 0) return;
+  var j = (dir === 'up') ? i - 1 : i + 1;
+  if(j < 0 || j >= list.length) return;
+  var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+  ss(stocksListKey(), JSON.stringify(list));
+  var cache = parseJSON(gs(K.stocksCache), null);
+  if(cache && cache.market === stocksMarket() && cache.rows && cache.rows.length){
+    var by = {};
+    cache.rows.forEach(function(r){ if(r && r.symbol) by[r.symbol] = r; });
+    var ordered = [];
+    list.forEach(function(s){ if(by[s]) ordered.push(by[s]); });
+    if(ordered.length) cache.rows = ordered;
+    cache.symbols = list.join(',');
+    ss(K.stocksCache, JSON.stringify(cache));
+    renderStocks(cache);
+    renderStocksWindow(cache);
+  } else {
+    renderStocksWindow(null);
+  }
+  syncStocksUI();
+}
 function openStocks(){
   if(!stocksOn()) return;
   openWin('stocks-modal');
@@ -4100,6 +4827,7 @@ function openStocks(){
   renderStocksWindow(cache && cache.market === stocksMarket() ? cache : null);
   syncStocksUI();
   loadStocks(false);
+  loadFx(false);
 }
 function initStocks(){
   var tile = $('stocks');
@@ -4125,17 +4853,43 @@ function initStocks(){
   }
   if(addBtn) addBtn.onclick = doAdd;
   if(inp) inp.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); doAdd(); } };
+  var infoBtn = $('stockswin-info'), infoBox = $('stockswin-help');
+  if(infoBtn && infoBox){
+    infoBtn.onclick = function(){
+      var opening = infoBox.hasAttribute('hidden');
+      if(opening) infoBox.removeAttribute('hidden');
+      else infoBox.setAttribute('hidden', '');
+      infoBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+    };
+  }
   var list = $('stockswin-list');
   if(list) list.addEventListener('click', function(e){
+    var mv = e.target.closest('.sk-move-btn');
+    if(mv){
+      if(mv.disabled) return;
+      moveStockSymbol(mv.getAttribute('data-sym'), mv.getAttribute('data-dir'));
+      return;
+    }
     var b = e.target.closest('.sk-remove');
     if(!b) return;
     removeStockSymbol(b.getAttribute('data-sym'));
   });
   var rf = $('stockswin-refresh');
-  if(rf) rf.onclick = function(){ loadStocks(true); };
+  if(rf) rf.onclick = function(){
+    rf.classList.add('spinning');
+    loadStocks(true);
+    loadFx(true);
+    setTimeout(function(){ rf.classList.remove('spinning'); }, 900);
+  };
   populateCurrencySelects();
   var wcur = $('stockswin-currency');
   if(wcur) wcur.onchange = function(){ setStocksCurrency(wcur.value); };
+  populateFxSelects();
+  var fxb = $('fx-base'), fxq = $('fx-quote');
+  if(fxb) fxb.onchange = function(){ setFxPair('base', fxb.value); };
+  if(fxq) fxq.onchange = function(){ setFxPair('quote', fxq.value); };
+  renderFx(false);
+  loadFx(false);
   var wev = $('stockswin-every');
   if(wev){
     var commitW = function(){
@@ -4549,21 +5303,44 @@ function holEsc(s){
 }
 var _holidays = parseJSON(gs(K.holidayCache), null) || {};
 var _holidayReq = {};
-function holidayFor(y,m,d){
+/* one date can legitimately carry more than one name (regional overlaps,
+   observed + statutory days), so the cache stores a list per date and every
+   renderer flattens it */
+function holidayListAt(y,m,d){
   var region = holidayRegion();
   var year = _holidays[region] && _holidays[region][y];
-  if(!year) return null;
-  return year[y + '-' + pad2n(m + 1) + '-' + pad2n(d)] || null;
+  var v = year && year[y + '-' + pad2n(m + 1) + '-' + pad2n(d)];
+  if(!v) return [];
+  if(Object.prototype.toString.call(v) === '[object Array]') return v;
+  return [v];
 }
 /* every marked day in a month, in date order, for the visible name lists */
 function holidaysInMonth(y,m){
   if(!holidaysOn()) return [];
   var out = [], days = new Date(y, m + 1, 0).getDate();
   for(var d = 1; d <= days; d++){
-    var h = holidayFor(y, m, d);
-    if(h) out.push({ d:d, name:(h.local || h.name) });
+    var list = holidayListAt(y, m, d);
+    for(var i = 0; i < list.length; i++){
+      out.push({ d:d, name:(list[i].local || list[i].name) });
+    }
   }
   return out;
+}
+/* holidays are one switch, so every place that shows it (Settings, setup,
+   Calendar window) writes through here and stays in step */
+function syncHolidayToggles(){
+  var on = holidaysOn();
+  ['w-holidays','ob-holidays','calwin-holidays'].forEach(function(id){
+    var el = $(id);
+    if(el) el.checked = on;
+  });
+}
+function applyHolidays(on){
+  ss(K.showHolidays, on ? '1' : '0');
+  syncHolidayToggles();
+  if(on) ensureHolidays(wallNow().year);
+  renderCalendar();
+  if(_openWin === 'calendar-modal') renderCalWin(false);
 }
 var NAGER_HOL = 'https://date.nager.at/api/v3/PublicHolidays/';
 var ID_HOL = 'https://raw.githubusercontent.com/guangrei/APIHariLibur_V2/main/holidays.json';
@@ -4585,7 +5362,7 @@ function fetchIDHolidays(year){
       var item = map[k] || {};
       var y = k.slice(0, 4);
       if(!byYear[y]) byYear[y] = {};
-      byYear[y][k] = { name: item.summary || '', local: item.summary || '' };
+      byYear[y][k] = [{ name: item.summary || '', local: item.summary || '' }];
       seen = true;
     });
     if(!seen) throw new Error('empty');
@@ -4612,7 +5389,8 @@ function fetchNagerHolidays(year){
         if(!h || !h.date) return;
         /* a holiday shared by a sub-region is not a nationwide day off */
         if(h.global === false) return;
-        map[h.date] = { name: h.name || '', local: h.localName || '' };
+        if(!map[h.date]) map[h.date] = [];
+        map[h.date].push({ name: h.name || '', local: h.localName || '' });
       });
       if(!_holidays[region]) _holidays[region] = {};
       _holidays[region][year] = map;
@@ -4668,9 +5446,10 @@ function renderCalendar(){
     out += '<span class="cal-day other">' + (daysPrev - i + 1) + '</span>';
   }
   for(var d = 1; d <= daysInMonth; d++){
-    var hol = holidaysOn() ? holidayFor(y, m, d) : null;
-    out += '<span class="cal-day' + (d === today ? ' today' : '') + (hol ? ' hol' : '') +
-           (hol ? '" title="' + holEsc(hol.local || hol.name) : '') + '">' + d + '</span>';
+    var hols = holidaysOn() ? holidayListAt(y, m, d) : [];
+    out += '<span class="cal-day' + (d === today ? ' today' : '') + (hols.length ? ' hol' : '') +
+           (hols.length ? '" title="' + holEsc(hols.map(function(h){ return h.local || h.name; }).join(' \u00b7 ')) : '') +
+           '">' + d + '</span>';
   }
   var cells = firstDow + daysInMonth;
   var nextDay = 1;
@@ -4684,14 +5463,16 @@ function renderCalendar(){
   setText($('cal-year'), String(y));
   var hb = $('cal-hol');
   if(hb){
-    var hlist = holidaysInMonth(y, m), pickH = null;
-    for(var hi = 0; hi < hlist.length; hi++){
-      if(hlist[hi].d >= today){ pickH = hlist[hi]; break; }
-    }
-    if(pickH){
-      hb.innerHTML = '<span class="cal-hol-star">\u2726</span><span class="cal-hol-txt">' +
-        pickH.d + ' ' + MONTH_NAMES[m].slice(0, 3) + ' \u00b7 ' + holEsc(pickH.name) + '</span>';
-      hb.title = pickH.name;
+    var hlist = holidaysInMonth(y, m);
+    if(hlist.length){
+      var hhx = '';
+      hlist.forEach(function(h){
+        hhx += '<span class="cal-hol-line"><span class="cal-hol-star">\u2726</span>' +
+          '<span class="cal-hol-txt">' + h.d + ' ' + MONTH_NAMES[m].slice(0, 3) + ' \u00b7 ' +
+          holEsc(h.name) + '</span></span>';
+      });
+      hb.innerHTML = hhx;
+      hb.title = hlist.map(function(h){ return h.d + ' ' + MONTH_NAMES[m].slice(0, 3) + ' \u00b7 ' + h.name; }).join('\n');
       hb.hidden = false;
     } else {
       hb.innerHTML = '';
@@ -5132,6 +5913,41 @@ function applyQuoteStyle(){
   }
 }
 
+function applyQuoteCardWidth(px){
+  px = parseInt(px,10);
+  if(!(px > 0)) px = 320;
+  px = Math.max(180, Math.min(1200, px));
+  var sizes = parseJSON(gs(K.sizes),{}) || {};
+  /* auto:1 means the card hugs the quote and only width drives the scale.
+     fixed:1 keeps the chosen width through UI-scale refits. */
+  sizes.quote = { w:px, auto:1, fixed:1 };
+  ss(K.sizes, JSON.stringify(sizes));
+  var el = $('quote');
+  if(el){
+    var w = Math.max(MIN_W.quote || 180, Math.min(window.innerWidth, px));
+    el.style.width = w + 'px';
+    el.style.height = '';
+    applySizeScale('quote', true);
+  }
+  syncQuoteCardUI();
+  scheduleLens();
+}
+function currentQuoteCardWidth(){
+  var sizes = parseJSON(gs(K.sizes),{}) || {};
+  var w = (sizes.quote && sizes.quote.w > 0) ? Math.round(sizes.quote.w)
+        : (($('quote') && $('quote').offsetWidth) || 320);
+  return Math.max(180, Math.min(1200, w));
+}
+/* the settings slider and the quote-window slider are one control in two places */
+function syncQuoteCardUI(){
+  var w = currentQuoteCardWidth();
+  [['iquote-card','iquote-card-v'],['qw-card','qw-card-v']].forEach(function(pair){
+    var el = $(pair[0]), lab = $(pair[1]);
+    if(el) el.value = w;
+    if(lab) lab.textContent = w + 'px';
+  });
+}
+
 function localQuote(cat){
   var list = LOCAL_QUOTES[cat] || LOCAL_QUOTES.general;
   var q = pick(list), tries = 0;
@@ -5141,9 +5957,9 @@ function localQuote(cat){
 
 function fetchQuote(cat){
   if(cat === 'general'){
-    return fetchJSON('https://dummyjson.com/quotes/random',8000).then(function(j){
-      return { text:j.quote, author:j.author };
-    });
+    /* General stays secular. The dummyjson random feed occasionally returned a
+       religious verse, which belongs in the Bible / Quran categories instead. */
+    return Promise.resolve(localQuote('general'));
   }
   if(cat === 'bible'){
     return fetchJSON('https://bible-api.com/data/web/random',8000).then(function(j){
@@ -5634,6 +6450,35 @@ function buildBrowserGrid(){
   selectIn(g,'.browser-card','data-name',cur);
 }
 
+/* turn a picked picture into a small square data URL, so a custom shortcut
+   icon lives with the shortcut and localStorage stays light */
+function iconDataFromFile(file, cb){
+  if(!file) return;
+  var fr = new FileReader();
+  fr.onload = function(){
+    var img = new Image();
+    img.onload = function(){
+      try{
+        var s = 64, c = document.createElement('canvas');
+        c.width = s; c.height = s;
+        var ctx = c.getContext('2d');
+        ctx.clearRect(0,0,s,s);
+        var w = img.naturalWidth || img.width || s;
+        var h = img.naturalHeight || img.height || s;
+        var k = Math.min(s / w, s / h);
+        var dw = Math.max(1, Math.round(w * k)), dh = Math.max(1, Math.round(h * k));
+        ctx.drawImage(img, Math.round((s - dw) / 2), Math.round((s - dh) / 2), dw, dh);
+        cb(c.toDataURL('image/png'));
+      }catch(e){
+        cb(fr.result);
+      }
+    };
+    img.onerror = function(){ cb(fr.result); };
+    img.src = fr.result;
+  };
+  fr.readAsDataURL(file);
+}
+
 function buildScEditor(){
   var list = $('sclist');
   if(!list) return;
@@ -5641,6 +6486,47 @@ function buildScEditor(){
   getSC().forEach(function(sc,i){
     var row = document.createElement('div');
     row.className = 'sci';
+
+    var iconBtn = document.createElement('button');
+    iconBtn.type = 'button';
+    iconBtn.className = 'sci-ic';
+    iconBtn.title = sc.icon
+      ? 'Custom icon — click to change, × to use the automatic favicon'
+      : 'Add a custom icon (otherwise the automatic favicon is used)';
+    if(sc.icon){
+      var pic = document.createElement('img');
+      pic.src = sc.icon;
+      pic.alt = '';
+      iconBtn.appendChild(pic);
+      var x = document.createElement('span');
+      x.className = 'sci-ic-x';
+      x.textContent = '×';
+      x.title = 'Use the automatic favicon instead';
+      x.onclick = function(e){
+        e.stopPropagation();
+        var aa = getSC(); aa[i].icon = ''; saveSC(aa);
+        buildScEditor(); renderSC();
+      };
+      iconBtn.appendChild(x);
+    } else {
+      iconBtn.textContent = '＋';
+    }
+
+    var fileInp = document.createElement('input');
+    fileInp.type = 'file';
+    fileInp.accept = 'image/*';
+    fileInp.style.display = 'none';
+    iconBtn.onclick = function(){ fileInp.click(); };
+    fileInp.onchange = function(){
+      var f = fileInp.files && fileInp.files[0];
+      if(!f) return;
+      iconDataFromFile(f, function(data){
+        if(!data) return;
+        var aa = getSC(); aa[i].icon = data; saveSC(aa);
+        buildScEditor(); renderSC();
+      });
+    };
+
     var urlInp = document.createElement('input');
     urlInp.placeholder = 'URL';
     urlInp.value = sc.url || '';
@@ -5650,7 +6536,8 @@ function buildScEditor(){
     var del = document.createElement('button');
     del.className = 'sdel';
     del.textContent = '✕';
-    row.appendChild(urlInp); row.appendChild(labelInp); row.appendChild(del);
+    row.appendChild(iconBtn); row.appendChild(urlInp); row.appendChild(labelInp); row.appendChild(del);
+    row.appendChild(fileInp);
     list.appendChild(row);
 
     urlInp.oninput = function(){
@@ -5939,7 +6826,7 @@ function loadUI(){
   setChecked('w-quote',     gs(K.showQuote)     !== '0');
   setChecked('w-status',    gs(K.showStatus)    !== '0');
   setChecked('w-stocks',    gs(K.showStocks)    === '1');
-  setChecked('w-holidays',  gs(K.showHolidays)  === '1');
+  syncHolidayToggles();
   var hc = $('iholidaycountry');
   if(hc) hc.value = (gs(K.holidayCountry) || '').toUpperCase();
   var sl = $('istockslist');
@@ -5987,6 +6874,8 @@ function loadUI(){
   var qav = parseInt(gs(K.quoteAuthorSize),10);  if(!(qav > 0)) qav = 11;
   if(qsz){ qsz.value = qsv; if(qszv) qszv.textContent = qsv + 'px'; }
   if(qaz){ qaz.value = qav; if(qazv) qazv.textContent = qav + 'px'; }
+  var qcw = $('iquote-card'), qcwv = $('iquote-card-v');
+  if(qcw) syncQuoteCardUI();
   startQuoteTimer();
 
   /* video view */
@@ -6160,6 +7049,34 @@ function importSettings(file){
 /* ══════════════════════════════════════════
    BOOT
 ══════════════════════════════════════════ */
+/* The veil is removed once the two things that decide the first honest frame
+   are done: the bundled font (so nothing reflows) and the wallpaper lookup (so
+   the poster is already the right scene). A fast load shows no mark at all —
+   boot.js delays it 180 ms — and a slow one keeps it for a readable 250 ms
+   instead of a blink. */
+var _bootFinished = false;
+function finishBoot(){
+  if(_bootFinished) return;
+  _bootFinished = true;
+  var t0 = window.__ntBootT0 || 0;
+  var now = (window.performance && window.performance.now)
+    ? window.performance.now() : Date.now();
+  var elapsed = t0 ? (now - t0) : 999;
+  var wait = elapsed > 140 ? Math.max(0, 430 - elapsed) : 0;
+  setTimeout(function(){
+    document.body.classList.add('booted');
+    setTimeout(function(){
+      var veil = $('boot-veil');
+      if(veil && veil.parentNode) veil.parentNode.removeChild(veil);
+    }, 900);
+  }, wait);
+}
+var _bootGates = 2;
+function bootReady(){
+  _bootGates--;
+  if(_bootGates <= 0) finishBoot();
+}
+
 ensureWallModeDefault();
 /* paint the right surface from the very first frame, before the video blob
    loads — otherwise a fresh gradient profile would flash a frame of video */
@@ -6264,7 +7181,12 @@ RESIZABLE.forEach(function(id){
   if(el){ addResizeKnob(el); addResetKnob(el); }
 });
 
-loadBlob(function(b){ applyVideoBlob(b || null); });
+loadBlob(function(b){ applyVideoBlob(b || null); bootReady(); });
+if(document.fonts && document.fonts.ready && document.fonts.ready.then){
+  document.fonts.ready.then(bootReady, bootReady);
+} else {
+  bootReady();
+}
 initPower();
 scheduleClock();
 
@@ -6317,7 +7239,7 @@ document.addEventListener('visibilitychange',function(){
 /* ── clock wiring ── */
 (function(){
   var ih = $('ihour'), isec = $('isecs'), idf = $('idatefmt');
-  if(ih)   ih.onchange   = function(){ ss(K.hourFmt,ih.value);  applyClockStyle(); scheduleClock(); refreshWeatherStamp(); scheduleRefit(); };
+  if(ih)   ih.onchange   = function(){ ss(K.hourFmt,ih.value);  applyClockStyle(); scheduleClock(); refreshWeatherStamp(); scheduleRefit(); refreshStocksClock(); };
   if(isec) isec.onchange = function(){ ss(K.showSecs,isec.value); scheduleClock(); scheduleRefit(); };
   if(idf)  idf.onchange  = function(){ ss(K.dateFmt,idf.value); applyClockStyle(); scheduleClock(); scheduleRefit(); };
   var ics = $('iclocktime'), icsv = $('iclocktime-v');
@@ -6951,10 +7873,11 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
   });
   showToggle('w-status',K.showStatus,function(on){ if(!on) closeStatus(false); });
   showToggle('w-stocks',K.showStocks,function(on){
-    if(on) loadStocks(true);
+    if(on){ loadStocks(true); loadFx(false); }
     startStocksTimer();
   });
   showToggle('w-holidays',K.showHolidays,function(on){
+    syncHolidayToggles();
     if(on){ ensureHolidays(wallNow().year); }
     renderCalendar();
     if(_openWin === 'calendar-modal') renderCalWin(false);
@@ -6965,7 +7888,11 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     /* drop focus so :focus-within can't keep the button on screen after the
        window closes */
     try{ skRefresh.blur(); }catch(e){}
-    loadStocks(true);
+    if(skRefresh.classList.contains('spinning')) return;   /* one tap, one request */
+    tapRing(skRefresh);
+    var stop = spinFor(skRefresh,700);
+    var p = loadStocks(true);
+    if(p && p.then) p.then(stop, stop); else stop();
   };
 
   var stocksInput = $('istockslist');
@@ -7194,10 +8121,10 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     e.stopPropagation();
     try{ wr.blur(); }catch(err){}
     if(wr.classList.contains('spinning')) return;   /* one tap, one request */
-    wr.classList.add('spinning');
+    /* a tap-sized ripple, so quick fetches still feel responsive */
+    tapRing(wr);
+    var stop = spinFor(wr,700);
     var p = loadWeather(true);
-    function stop(){ wr.classList.remove('spinning'); }
-    /* the icon spins for as long as the forecast actually takes */
     if(p && p.then) p.then(stop, stop); else stop();
   };
 
@@ -7217,8 +8144,12 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
     e.preventDefault();
     e.stopPropagation();
     try{ qr.blur(); }catch(err){}
+    if(qr.classList.contains('spinning')) return;   /* one tap, one request */
+    tapRing(qr);
+    var stop = spinFor(qr,700);
     loadQuote(true);
     startQuoteTimer();
+    stop();
   };
 
   var qe = $('iquoteevery');
@@ -7257,6 +8188,7 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
   var qaa = $('iquoteauthoralign'), qas = $('iquoteauthorstyle');
   var qsz = $('iquotesize'), qszv = $('iquotesize-v');
   var qaz = $('iquoteauthorsize'), qazv = $('iquoteauthorsize-v');
+  var qcw = $('iquote-card'), qcwv = $('iquote-card-v');
   function commitQuoteStyle(){
     if(qal) ss(K.quoteAlign,qal.value);
     if(qst) ss(K.quoteStyle,qst.value);
@@ -7279,6 +8211,12 @@ document.querySelectorAll('.tbtn').forEach(function(btn){
   };
   wirePeek(qsz, function(){ return 'Quote text ' + qsz.value + 'px'; });
   wirePeek(qaz, function(){ return 'Author ' + qaz.value + 'px'; });
+  if(qcw) qcw.oninput = function(){
+    if(qcwv) qcwv.textContent = qcw.value + 'px';
+    applyQuoteCardWidth(qcw.value);
+    peekUpdate('Quote card ' + qcw.value + 'px');
+  };
+  wirePeek(qcw, function(){ return 'Quote card ' + qcw.value + 'px'; });
 
   var bsq = $('bsavequote'), icq = $('icustomquote'), icqa = $('icustomquoteauthor');
   if(bsq) bsq.onclick = function(){
@@ -7673,6 +8611,7 @@ function openWelcome(){
       if(ih) ih.value = choice.hour;
       applyClockStyle();
       if(typeof refreshClockCard === 'function') refreshClockCard();
+      refreshStocksClock();
     }
     if(choice.timeSrc !== (gs(K.timeSource) || 'device')){
       ss(K.timeSource, choice.timeSrc);
@@ -7775,10 +8714,7 @@ function openWelcome(){
   if(obHols){
     obHols.checked = gs(K.showHolidays) === '1';
     obHols.onchange = function(){
-      ss(K.showHolidays, obHols.checked ? '1' : '0');
-      applyWidgetVisibility(true);
-      if(obHols.checked) ensureHolidays(wallNow().year);
-      renderCalendar();
+      applyHolidays(obHols.checked);
     };
   }
 
@@ -8022,9 +8958,10 @@ function renderCalWin(anim){
   }
   for(var d = 1; d <= daysInMonth; d++){
     var today = (y === now.year && m === now.mon && d === now.date);
-    var hol = holidaysOn() ? holidayFor(y, m, d) : null;
-    out += '<span class="cal-day' + (today ? ' today' : '') + (hol ? ' hol' : '') +
-           (hol ? '" title="' + holEsc(hol.local || hol.name) : '') + '">' + d + '</span>';
+    var hols = holidaysOn() ? holidayListAt(y, m, d) : [];
+    out += '<span class="cal-day' + (today ? ' today' : '') + (hols.length ? ' hol' : '') +
+           (hols.length ? '" title="' + holEsc(hols.map(function(h){ return h.local || h.name; }).join(' \u00b7 ')) : '') +
+           '">' + d + '</span>';
   }
   var cells = firstDow + daysInMonth, nextDay = 1;
   while(cells % 7 !== 0 || cells < 35){
@@ -8064,11 +9001,14 @@ function openCalWin(){
   _calWinMonth = wallNow().mon;
   _calWinYear  = wallNow().year;
   extSyncTimeSource();
+  syncHolidayToggles();
   renderCalWin(true);
   syncCalSizeUI();
   openWin('calendar-modal');
 }
 (function(){
+  var hb = $('calwin-holidays');
+  if(hb) hb.onchange = function(){ applyHolidays(hb.checked); };
   var p = $('calwin-prev');
   if(p) p.onclick = function(){
     var now = wallNow();
@@ -8139,6 +9079,7 @@ function openClockWin(){
   if(h) h.onchange = function(){
     ss(K.hourFmt, h.value);
     applyClockStyle(); scheduleClock(); refreshWeatherStamp(); scheduleRefit();
+    refreshStocksClock();
     var ih = $('ihour'); if(ih) ih.value = h.value;
   };
   var s = $('clockwin-secs');
@@ -8411,9 +9352,20 @@ function openQuoteWin(){
   var a = $('qw-custom-author'); if(a) a.value = gs(K.customQuoteAuthor) || '';
   setText($('qw-sub'), extCatName(cat));
   renderQuoteWinPreview();
+  syncQuoteCardUI();
   openWin('quote-modal');
 }
 (function(){
+  /* card width, right in the window so it can be judged against the card */
+  var qwc = $('qw-card');
+  if(qwc){
+    qwc.oninput = function(){
+      if($('qw-card-v')) $('qw-card-v').textContent = qwc.value + 'px';
+      applyQuoteCardWidth(qwc.value);
+      peekUpdate('Quote card ' + qwc.value + 'px');
+    };
+    wireWinPeek(qwc, 'quote-modal', function(){ return 'Quote card ' + qwc.value + 'px'; });
+  }
   /* how often the quote changes, right here in the window */
   var qwe = $('qw-every');
   if(qwe) qwe.onchange = function(){ commitQuoteEvery(qwe.value); };
